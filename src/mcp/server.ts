@@ -82,11 +82,20 @@ server.registerTool(
       slug: z.string(),
       name: z.string(),
       description: z.string().optional(),
+      type: z.string().optional().describe("Product type: mobile | web | saas | bot | cli | api | library | desktop"),
       stage: z.enum(["idea", "mvp", "active", "paused", "shipped"]).optional(),
+      blockers: z.array(z.string()).optional().describe("Must-know blockers before launch (from .ai-codex / sessions)"),
       language: z.string().optional(),
       frameworks: z.array(z.string()).optional(),
       database: z.string().optional(),
-      services: z.array(z.string()).optional(),
+      services: z.array(z.union([
+        z.string(),
+        z.object({ provider: z.string(), account: z.string().optional() }),
+      ])).optional().describe("Services used, optionally with which account, e.g. {provider:'supabase', account:'Supabase 2'}"),
+      tasks: z.array(z.union([
+        z.string(),
+        z.object({ text: z.string(), done: z.boolean(), category: z.string().optional() }),
+      ])).optional().describe("Tasks with done state and optional category (frontend/backend/design/devops/qa)"),
       github_url: z.string().optional(),
       local_path: z.string().optional(),
       keys_ref: z.string().optional().describe("Path pointer to local key file — NOT key values"),
@@ -94,7 +103,7 @@ server.registerTool(
   },
   async (args) => {
     if (getProject(args.slug)) return fail(`Project '${args.slug}' already exists.`);
-    return json(createProject(args));
+    return json(createProject(args as any));
   }
 );
 
@@ -106,11 +115,20 @@ server.registerTool(
     inputSchema: {
       slug: z.string(),
       description: z.string().optional(),
+      type: z.string().optional().describe("Product type: mobile | web | saas | bot | cli | api | library | desktop"),
       stage: z.enum(["idea", "mvp", "active", "paused", "shipped"]).optional(),
+      blockers: z.array(z.string()).optional().describe("Must-know blockers before launch"),
       language: z.string().optional(),
       frameworks: z.array(z.string()).optional(),
       database: z.string().optional(),
-      services: z.array(z.string()).optional(),
+      services: z.array(z.union([
+        z.string(),
+        z.object({ provider: z.string(), account: z.string().optional() }),
+      ])).optional(),
+      tasks: z.array(z.union([
+        z.string(),
+        z.object({ text: z.string(), done: z.boolean(), category: z.string().optional() }),
+      ])).optional().describe("Replace task list (done state + optional category). Keeps progress current."),
       tests_status: z.enum(["none", "partial", "green"]).optional(),
       tests_note: z.string().optional(),
       github_url: z.string().optional(),
@@ -119,7 +137,7 @@ server.registerTool(
     },
   },
   async ({ slug, ...patch }) => {
-    const r = updateProject(slug, patch);
+    const r = updateProject(slug, patch as any);
     return r ? json(r) : fail(`No project '${slug}'.`);
   }
 );

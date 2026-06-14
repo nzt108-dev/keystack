@@ -21,10 +21,39 @@ describe("projects", () => {
   });
 
   it("round-trips JSON array columns", () => {
-    createProject({ slug: "beta", name: "Beta", frameworks: ["Next.js", "React"], services: ["stripe"] });
+    createProject({ slug: "beta", name: "Beta", frameworks: ["Next.js", "React"], services: ["stripe"] as any });
     const p = getProject("beta")!;
     expect(p.frameworks).toEqual(["Next.js", "React"]);
-    expect(p.services).toEqual(["stripe"]);
+    // bare strings normalize to ServiceRef objects (backward compatible)
+    expect(p.services).toEqual([{ provider: "stripe" }]);
+  });
+
+  it("stores services with accounts and tasks with done state", () => {
+    createProject({
+      slug: "acc", name: "Acc",
+      services: [{ provider: "supabase", account: "Supabase 2" }, { provider: "resend" }],
+      tasks: [{ text: "schema", done: true }, { text: "auth", done: false }],
+    });
+    const p = getProject("acc")!;
+    expect(p.services).toEqual([{ provider: "supabase", account: "Supabase 2" }, { provider: "resend" }]);
+    expect(p.tasks).toEqual([{ text: "schema", done: true }, { text: "auth", done: false }]);
+  });
+
+  it("normalizes bare-string tasks to done:false", () => {
+    createProject({ slug: "t", name: "T", tasks: ["do thing"] as any });
+    expect(getProject("t")!.tasks).toEqual([{ text: "do thing", done: false }]);
+  });
+
+  it("stores type, blockers and task categories", () => {
+    createProject({
+      slug: "m", name: "M", type: "mobile",
+      blockers: ["App Store review", "HealthKit entitlement"],
+      tasks: [{ text: "login", done: false, category: "frontend" }],
+    });
+    const p = getProject("m")!;
+    expect(p.type).toBe("mobile");
+    expect(p.blockers).toEqual(["App Store review", "HealthKit entitlement"]);
+    expect(p.tasks[0].category).toBe("frontend");
   });
 
   it("partial-updates only provided fields and bumps last_touched", async () => {

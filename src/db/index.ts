@@ -14,11 +14,14 @@ export interface Project {
   slug: string;
   name: string;
   description: string;
+  type: string;
   stage: string;
+  blockers: string[];
   language: string;
   frameworks: string[];
   database: string;
-  services: string[];
+  services: ServiceRef[];
+  tasks: Task[];
   tests_status: string;
   tests_note: string;
   github_url: string;
@@ -28,6 +31,12 @@ export interface Project {
   last_touched: string | null;
   created_at: string;
 }
+
+/** A service used by a project, plus which account (e.g. supabase · "Supabase 2"). */
+export interface ServiceRef { provider: string; account?: string; }
+
+/** A project task with done state and optional category (frontend/backend/design/…). */
+export interface Task { text: string; done: boolean; category?: string; }
 
 export interface Skill {
   slug: string;
@@ -62,6 +71,14 @@ export function getDb(): Database.Database {
   _db = new Database(join(dir, "keystack.db"));
   _db.pragma("journal_mode = WAL");
   _db.exec(SCHEMA);
+  // Migration: add columns to pre-existing DBs (CREATE TABLE IF NOT EXISTS won't).
+  const cols = (_db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map((c) => c.name);
+  const addCol = (name: string, def: string) => {
+    if (!cols.includes(name)) _db!.exec(`ALTER TABLE projects ADD COLUMN ${name} ${def}`);
+  };
+  addCol("tasks", "TEXT DEFAULT '[]'");
+  addCol("type", "TEXT DEFAULT ''");
+  addCol("blockers", "TEXT DEFAULT '[]'");
   return _db;
 }
 
@@ -75,6 +92,27 @@ const arr = (s: unknown): string[] => {
   }
 };
 
+/** Accept strings or {provider,account} objects → normalized ServiceRef[] (backward compatible). */
+function normServices(input: unknown): ServiceRef[] {
+  let v: any = input;
+  if (typeof v === "string") { try { v = JSON.parse(v || "[]"); } catch { v = []; } }
+  if (!Array.isArray(v)) return [];
+  return v.map((it) =>
+    typeof it === "string" ? { provider: it } : { provider: String(it?.provider ?? ""), account: it?.account || undefined }
+  ).filter((s) => s.provider);
+}
+
+function normTasks(input: unknown): Task[] {
+  let v: any = input;
+  if (typeof v === "string") { try { v = JSON.parse(v || "[]"); } catch { v = []; } }
+  if (!Array.isArray(v)) return [];
+  return v.map((it) =>
+    typeof it === "string"
+      ? { text: it, done: false }
+      : { text: String(it?.text ?? ""), done: !!it?.done, category: it?.category || undefined }
+  ).filter((t) => t.text);
+}
+
 // ---- Projects --------------------------------------------------------------
 
 function rowToProject(r: any): Project {
@@ -82,11 +120,14 @@ function rowToProject(r: any): Project {
     slug: r.slug,
     name: r.name,
     description: r.description,
+    type: r.type ?? "",
     stage: r.stage,
+    blockers: arr(r.blockers),
     language: r.language,
     frameworks: arr(r.frameworks),
     database: r.database,
-    services: arr(r.services),
+    services: normServices(r.services),
+    tasks: normTasks(r.tasks),
     tests_status: r.tests_status,
     tests_note: r.tests_note,
     github_url: r.github_url,
@@ -114,22 +155,25 @@ export function createProject(input: Partial<Project> & { slug: string; name: st
   const db = getDb();
   db.prepare(
     `INSERT INTO projects
-      (slug, name, description, stage, language, frameworks, database, services,
+      (slug, name, description, type, stage, blockers, language, frameworks, database, services, tasks,
        tests_status, tests_note, github_url, next_steps, keys_ref, local_path,
        last_touched, created_at)
      VALUES
-      (@slug, @name, @description, @stage, @language, @frameworks, @database, @services,
+      (@slug, @name, @description, @type, @stage, @blockers, @language, @frameworks, @database, @services, @tasks,
        @tests_status, @tests_note, @github_url, @next_steps, @keys_ref, @local_path,
        @last_touched, @created_at)`
   ).run({
     slug: input.slug,
     name: input.name,
     description: input.description ?? "",
+    type: input.type ?? "",
     stage: input.stage ?? "idea",
+    blockers: JSON.stringify(input.blockers ?? []),
     language: input.language ?? "",
     frameworks: JSON.stringify(input.frameworks ?? []),
     database: input.database ?? "",
-    services: JSON.stringify(input.services ?? []),
+    services: JSON.stringify(normServices(input.services)),
+    tasks: JSON.stringify(normTasks(input.tasks)),
     tests_status: input.tests_status ?? "none",
     tests_note: input.tests_note ?? "",
     github_url: input.github_url ?? "",
@@ -156,11 +200,14 @@ export function updateProject(slug: string, patch: Partial<Project>): Project | 
 
   if (patch.name !== undefined) set("name", patch.name);
   if (patch.description !== undefined) set("description", patch.description);
+  if (patch.type !== undefined) set("type", patch.type);
   if (patch.stage !== undefined) set("stage", patch.stage);
+  if (patch.blockers !== undefined) set("blockers", JSON.stringify(patch.blockers));
   if (patch.language !== undefined) set("language", patch.language);
   if (patch.frameworks !== undefined) set("frameworks", JSON.stringify(patch.frameworks));
   if (patch.database !== undefined) set("database", patch.database);
-  if (patch.services !== undefined) set("services", JSON.stringify(patch.services));
+  if (patch.services !== undefined) set("services", JSON.stringify(normServices(patch.services)));
+  if (patch.tasks !== undefined) set("tasks", JSON.stringify(normTasks(patch.tasks)));
   if (patch.tests_status !== undefined) set("tests_status", patch.tests_status);
   if (patch.tests_note !== undefined) set("tests_note", patch.tests_note);
   if (patch.github_url !== undefined) set("github_url", patch.github_url);

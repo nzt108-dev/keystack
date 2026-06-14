@@ -1,5 +1,7 @@
 # 🗂️ KeyStack
 
+[![CI](https://github.com/nzt108-dev/keystack/actions/workflows/ci.yml/badge.svg)](https://github.com/nzt108-dev/keystack/actions/workflows/ci.yml)
+
 **Live project registry for coding agents.** A local dashboard + MCP server that
 remembers your whole portfolio — description, stage, stack, services, tests,
 GitHub link, next steps — plus your **skills** and **prompts**. Your coding agent

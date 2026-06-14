@@ -21,31 +21,63 @@ const esc = (s: unknown) =>
   );
 
 const stageColor: Record<string, string> = {
-  idea: "#8a8a8a", mvp: "#d9a441", active: "#4a9d6b",
-  paused: "#b06a4a", shipped: "#4a7dd9",
+  idea: "#64748b", mvp: "#f59e0b", active: "#22c55e",
+  paused: "#f97316", shipped: "#3b82f6",
+};
+
+const ICON = {
+  github: `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.08.66-.22.66-.48v-1.7c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.1-.65.35-1.09.63-1.34-2.21-.25-4.54-1.1-4.54-4.92 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.83-2.34 4.67-4.56 4.92.36.31.68.92.68 1.85v2.74c0 .26.16.57.67.48A10 10 0 0 0 12 2Z"/></svg>`,
+  layers: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
 };
 
 function projectCard(p: Project): string {
+  const color = stageColor[p.stage] ?? "#64748b";
   const chips = [p.language, ...p.frameworks, p.database].filter(Boolean)
     .map((t) => `<span class="chip">${esc(t)}</span>`).join("");
-  const services = p.services.map((s) => `<span class="svc">${esc(s)}</span>`).join("");
-  const next = p.next_steps.slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
-  return `<div class="card">
+  const services = p.services.map((s) =>
+    `<span class="svc">${esc(s.provider)}${s.account ? `<em>·${esc(s.account)}</em>` : ""}</span>`).join("");
+
+  const done = p.tasks.filter((t) => t.done).length;
+  const total = p.tasks.length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const catLabel = (c?: string) => c ? `<span class="cat cat-${esc(c)}">${esc(c)}</span>` : "";
+  const taskList = p.tasks.slice(0, 8).map((t) =>
+    `<li class="${t.done ? "done" : ""}">${t.done ? "✓" : "○"} ${catLabel(t.category)}${esc(t.text)}</li>`).join("");
+  const tasksBlock = total ? `<div class="tasks">
+      <div class="tasks-head"><span class="next-label">tasks</span><span class="prog-num">${done}/${total}</span></div>
+      <div class="bar"><i style="width:${pct}%;background:${color}"></i></div>
+      <ul class="tasklist">${taskList}</ul>
+    </div>` : (p.next_steps.length ? `<div class="tasks">
+      <span class="next-label">next</span>
+      <ul class="tasklist">${p.next_steps.slice(0, 4).map((n) => `<li>○ ${esc(n)}</li>`).join("")}</ul>
+    </div>` : "");
+
+  const blockersBlock = p.blockers.length ? `<div class="blockers">
+      <div class="blk-head">⚠ blockers</div>
+      <ul>${p.blockers.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+    </div>` : "";
+
+  return `<div class="card" data-kind="project" data-slug="${esc(p.slug)}" style="--stage:${color}">
     <div class="card-head">
       <h3>${esc(p.name)}</h3>
-      <span class="stage" style="background:${stageColor[p.stage] ?? "#666"}">${esc(p.stage)}</span>
+      <span class="stage"><i class="dot"></i>${esc(p.stage)}</span>
+    </div>
+    <div class="card-sub">
+      <code class="slug">${esc(p.slug)}</code>
+      ${p.type ? `<span class="ptype">${esc(p.type)}</span>` : ""}
     </div>
     <p class="desc">${esc(p.description) || "<i>no description</i>"}</p>
-    <div class="chips">${chips}</div>
-    ${services ? `<div class="svcs">🔌 ${services}</div>` : ""}
+    <div class="chips">${chips || `<span class="chip chip-empty">stack unknown</span>`}</div>
+    ${services ? `<div class="svcs">${services}</div>` : ""}
+    ${blockersBlock}
+    ${tasksBlock}
     <div class="meta">
-      <span class="tests tests-${esc(p.tests_status)}">tests: ${esc(p.tests_status)}</span>
-      ${p.github_url ? `<a href="${esc(p.github_url)}" target="_blank">GitHub ↗</a>` : ""}
+      <span class="tests tests-${esc(p.tests_status)}"><i class="tdot"></i>tests ${esc(p.tests_status)}</span>
+      ${p.github_url ? `<a href="${esc(p.github_url)}" target="_blank" rel="noopener">${ICON.github} repo</a>` : ""}
     </div>
-    ${next ? `<div class="next"><b>Next:</b><ul>${next}</ul></div>` : ""}
     <div class="actions">
-      <button class="btn-edit" data-kind="project" data-slug="${esc(p.slug)}">Edit</button>
-      <button class="btn-del" data-kind="project" data-slug="${esc(p.slug)}">Delete</button>
+      <button class="btn-edit" data-kind="project" data-slug="${esc(p.slug)}">edit</button>
+      <button class="btn-del" data-kind="project" data-slug="${esc(p.slug)}">delete</button>
     </div>
   </div>`;
 }
@@ -72,72 +104,144 @@ app.get("/", async (_req, reply) => {
   reply.type("text/html").send(`<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KeyStack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0e0f13; --panel:#171922; --ink:#e7e7ea; --dim:#9a9aa6; --line:#262833; --accent:#d9a441; }
+  :root {
+    --bg:#0f172a; --surface:#192234; --muted:#1a2334; --ink:#f1f5f9; --dim:#8a98ad;
+    --line:#1f2a3c; --line2:#2a374d; --accent:#22c55e; --danger:#ef4444;
+    --mono:'Fira Code',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Fira Sans',-apple-system,Segoe UI,Roboto,sans-serif;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
-  header { padding:24px 28px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; }
-  header h1 { margin:0; font-size:20px; letter-spacing:.5px; }
-  header .sub { color:var(--dim); }
-  .wrap { padding:24px 28px; max-width:1200px; margin:0 auto; }
-  .sec-head { display:flex; align-items:center; gap:12px; margin:28px 0 14px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin:0; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
-  .card,.skill,.prompt { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; position:relative; }
-  .card-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .card h3 { margin:0; font-size:15px; }
-  .stage { font-size:11px; padding:2px 9px; border-radius:20px; color:#0e0f13; font-weight:600; }
-  .desc { color:var(--dim); margin:8px 0 12px; min-height:20px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 var(--sans);
+    background-image:radial-gradient(circle at 50% -20%, #16223a 0%, var(--bg) 55%); min-height:100vh; }
+  ::selection { background:rgba(34,197,94,.25); }
+  header { padding:20px 28px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; }
+  .brand { display:flex; align-items:center; gap:10px; color:var(--accent); }
+  .brand h1 { margin:0; font:600 18px var(--mono); letter-spacing:.5px; color:var(--ink); }
+  .prompt-sym { color:var(--accent); font:var(--mono); }
+  header .sub { font:12px var(--mono); color:var(--dim); margin-left:auto; display:flex; align-items:center; gap:7px; }
+  header .sub .live { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+  .wrap { padding:8px 28px 48px; max-width:1240px; margin:0 auto; }
+  .sec-head { display:flex; align-items:center; gap:12px; margin:34px 0 16px; }
+  h2 { font:600 12px var(--mono); text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin:0; }
+  h2::before { content:'# '; color:var(--accent); }
+  .count { font:11px var(--mono); color:var(--dim); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:14px; }
+  .card,.skill,.prompt { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 16px 14px; position:relative; cursor:pointer; transition:border-color .18s, transform .18s, box-shadow .18s; }
+  .card button,.skill button,.prompt button,.card a { cursor:pointer; }
+  .card { border-left:3px solid var(--stage); }
+  .card:hover,.skill:hover,.prompt:hover { border-color:var(--line2); transform:translateY(-2px); box-shadow:0 8px 24px -12px rgba(0,0,0,.6); }
+  .card:hover { box-shadow:-3px 8px 24px -12px var(--stage); }
+  .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .card h3 { margin:0; font:600 15px var(--sans); }
+  .stage { font:11px var(--mono); color:var(--stage); display:flex; align-items:center; gap:5px; white-space:nowrap; }
+  .stage .dot { width:6px; height:6px; border-radius:50%; background:var(--stage); }
+  .card-sub { display:flex; align-items:center; gap:9px; margin-top:4px; flex-wrap:wrap; }
+  .slug { font:11px var(--mono); color:var(--dim); }
+  .ptype { font:10px var(--mono); text-transform:uppercase; letter-spacing:.5px; color:#a9b6cb; background:var(--muted); border:1px solid var(--line2); padding:1px 7px; border-radius:4px; }
+  .chip-empty { color:#5a6678; font-style:italic; border-style:dashed; }
+  .blockers { margin-top:13px; padding:10px 12px; border:1px solid rgba(239,68,68,.35); background:rgba(239,68,68,.07); border-radius:8px; }
+  .blk-head { font:10px var(--mono); text-transform:uppercase; letter-spacing:1px; color:#f87171; }
+  .blockers ul { margin:6px 0 0; padding-left:16px; font-size:12px; color:#f3b5b0; }
+  .blockers li { padding:1px 0; }
+  .cat { font:9px var(--mono); text-transform:uppercase; letter-spacing:.5px; padding:0 5px; border-radius:3px; margin-right:5px; background:var(--muted); color:var(--dim); }
+  .cat-frontend { color:#93c5fd; background:rgba(59,130,246,.14); }
+  .cat-backend { color:#86efac; background:rgba(34,197,94,.14); }
+  .cat-design { color:#d8b4fe; background:rgba(168,85,247,.14); }
+  .cat-devops { color:#fdba74; background:rgba(249,115,22,.14); }
+  .cat-qa { color:#fde047; background:rgba(234,179,8,.14); }
+  .cat-infra { color:#67e8f9; background:rgba(6,182,212,.14); }
+  .cat-content { color:#f9a8d4; background:rgba(236,72,153,.14); }
+  .desc { color:var(--dim); margin:9px 0 12px; min-height:18px; font-size:13px; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { background:#21242f; border:1px solid var(--line); padding:2px 9px; border-radius:6px; font-size:12px; }
-  .svcs { margin-top:10px; color:var(--dim); font-size:12px; }
-  .svc { color:var(--accent); margin-right:6px; }
-  .meta { display:flex; gap:14px; align-items:center; margin-top:12px; font-size:12px; }
-  .meta a { color:var(--accent); text-decoration:none; }
-  .tests-green { color:#5fc98a; } .tests-partial { color:#d9a441; } .tests-none { color:var(--dim); }
-  .next { margin-top:12px; font-size:12px; color:var(--dim); border-top:1px solid var(--line); padding-top:10px; }
-  .next ul { margin:4px 0 0; padding-left:18px; }
-  .skill h4, .prompt h4 { margin:0 0 4px; font-size:14px; }
+  .chip { font:11px var(--mono); background:var(--muted); border:1px solid var(--line); color:#c7d2e0; padding:2px 8px; border-radius:5px; }
+  .svcs { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+  .svc { font:11px var(--mono); color:var(--accent); }
+  .svc::before { content:'⬡ '; opacity:.7; }
+  .svc em { font-style:normal; color:var(--dim); }
+  .tasks { margin-top:13px; padding-top:11px; border-top:1px solid var(--line); }
+  .tasks-head { display:flex; justify-content:space-between; align-items:center; }
+  .prog-num { font:10px var(--mono); color:var(--dim); }
+  .bar { height:4px; border-radius:3px; background:var(--muted); margin:7px 0 9px; overflow:hidden; }
+  .bar i { display:block; height:100%; border-radius:3px; transition:width .4s ease; }
+  .tasklist { list-style:none; margin:0; padding:0; font:11.5px var(--mono); }
+  .tasklist li { color:var(--dim); padding:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tasklist li.done { color:#5a6678; text-decoration:line-through; }
+  .meta { display:flex; gap:16px; align-items:center; margin-top:13px; font:11px var(--mono); }
+  .meta a { color:var(--dim); text-decoration:none; display:flex; align-items:center; gap:5px; transition:color .15s; }
+  .meta a:hover { color:var(--ink); }
+  .tests { display:flex; align-items:center; gap:5px; color:var(--dim); }
+  .tests .tdot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .tests-green { color:#22c55e; } .tests-partial { color:#f59e0b; } .tests-none { color:#5a6678; }
+  .next { margin-top:13px; padding-top:11px; border-top:1px solid var(--line); }
+  .next-label { font:10px var(--mono); text-transform:uppercase; letter-spacing:1px; color:var(--accent); }
+  .next ul { margin:5px 0 0; padding-left:16px; color:var(--dim); font-size:12px; }
+  .skill h4, .prompt h4 { margin:0 0 5px; font:600 14px var(--sans); }
   .skill p, .prompt p { margin:0; color:var(--dim); font-size:12px; }
-  .actions { margin-top:12px; display:flex; gap:8px; }
-  button { font:inherit; cursor:pointer; border-radius:7px; border:1px solid var(--line); background:#21242f; color:var(--ink); padding:5px 12px; font-size:12px; }
-  button:hover { border-color:var(--accent); }
-  .btn-add { background:var(--accent); color:#0e0f13; font-weight:600; border:none; padding:6px 14px; }
-  .btn-del:hover { border-color:#c0584a; color:#e08a7c; }
-  .empty { color:var(--dim); padding:20px; border:1px dashed var(--line); border-radius:12px; }
+  .tag { font:10px var(--mono); color:var(--dim); }
+  .actions { margin-top:13px; display:flex; gap:8px; }
+  button { font:12px var(--mono); cursor:pointer; border-radius:6px; border:1px solid var(--line); background:var(--muted); color:var(--dim); padding:5px 12px; transition:.15s; }
+  button:hover { border-color:var(--line2); color:var(--ink); }
+  .btn-add { background:transparent; color:var(--accent); border-color:rgba(34,197,94,.4); }
+  .btn-add:hover { background:rgba(34,197,94,.1); color:var(--accent); border-color:var(--accent); }
+  .btn-del:hover { border-color:var(--danger); color:#f7a199; }
+  .empty { color:var(--dim); padding:22px; border:1px dashed var(--line); border-radius:10px; font:13px var(--mono); }
   /* modal */
-  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:50; }
+  .overlay { position:fixed; inset:0; background:rgba(8,12,22,.7); backdrop-filter:blur(3px); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; overflow:auto; z-index:50; }
   .overlay.open { display:flex; }
-  .modal { background:var(--panel); border:1px solid var(--line); border-radius:14px; width:560px; max-width:100%; padding:22px 24px; }
-  .modal h3 { margin:0 0 16px; }
-  .field { margin-bottom:12px; }
-  .field label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
-  .field input, .field select, .field textarea { width:100%; background:#0e0f13; border:1px solid var(--line); border-radius:7px; color:var(--ink); padding:8px 10px; font:inherit; }
-  .field textarea { resize:vertical; min-height:60px; }
-  .field input:disabled { opacity:.5; }
-  .hint { font-size:11px; color:var(--dim); margin-top:3px; }
-  .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+  .modal { background:var(--surface); border:1px solid var(--line2); border-radius:14px; width:580px; max-width:100%; padding:24px 26px; box-shadow:0 24px 60px -20px rgba(0,0,0,.7); }
+  .modal h3 { margin:0 0 18px; font:600 15px var(--mono); }
+  .modal h3::before { content:'> '; color:var(--accent); }
+  .field { margin-bottom:13px; }
+  .field label { display:block; font:11px var(--mono); color:var(--dim); margin-bottom:5px; }
+  .field input, .field select, .field textarea { width:100%; background:var(--bg); border:1px solid var(--line); border-radius:7px; color:var(--ink); padding:9px 11px; font:13px var(--sans); transition:border-color .15s; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--accent); }
+  .field textarea { resize:vertical; min-height:60px; font:12px var(--mono); }
+  .field input:disabled { opacity:.45; }
+  .hint { font:10px var(--mono); color:var(--dim); margin-top:4px; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  /* detail view */
+  .modal.wide { width:680px; border-left:3px solid var(--stage,var(--accent)); }
+  .dt h2 { margin:0 0 3px; font:600 19px var(--sans); }
+  .dt .card-sub { margin-top:5px; }
+  .dt .stage { display:inline-flex; }
+  .dt-desc { color:#c7d2e0; margin:14px 0; font-size:14px; line-height:1.65; }
+  .dt-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; margin:18px 0; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .dt-grid label { display:block; font:10px var(--mono); text-transform:uppercase; letter-spacing:.5px; color:var(--dim); margin-bottom:5px; }
+  .dt-grid .v { font-size:13px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .dt-grid .mono { font:12px var(--mono); color:#c7d2e0; word-break:break-all; }
+  .dt-grid a { color:var(--accent); text-decoration:none; word-break:break-all; }
+  .dt-tasks { margin-top:16px; }
+  .dt-blabel { display:block; font:10px var(--mono); text-transform:uppercase; letter-spacing:.5px; color:var(--accent); margin-top:16px; }
+  .dt-body { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:13px; font:12px/1.55 var(--mono); color:#c7d2e0; white-space:pre-wrap; word-break:break-word; max-height:380px; overflow:auto; margin:7px 0 0; }
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
 </style></head><body>
-<header><h1>🗂️ KeyStack</h1><span class="sub">live project registry · ${projects.length} projects · ${skills.length} skills · ${prompts.length} prompts</span></header>
+<header>
+  <span class="brand">${ICON.layers}<h1>keystack</h1></span>
+  <span class="sub"><span class="live"></span>${projects.length} projects · ${skills.length} skills · ${prompts.length} prompts</span>
+</header>
 <div class="wrap">
-  <div class="sec-head"><h2>Projects</h2><button class="btn-add" onclick="openForm('project')">+ Project</button></div>
+  <div class="sec-head"><h2>projects</h2><span class="count">${projects.length}</span><button class="btn-add" onclick="openForm('project')">+ new</button></div>
   ${projects.length ? `<div class="grid">${projects.map(projectCard).join("")}</div>`
-    : `<div class="empty">No projects yet.</div>`}
+    : `<div class="empty">no projects yet — add one or let your agent populate it via MCP.</div>`}
 
-  <div class="sec-head"><h2>Skills</h2><button class="btn-add" onclick="openForm('skill')">+ Skill</button></div>
+  <div class="sec-head"><h2>skills</h2><span class="count">${skills.length}</span><button class="btn-add" onclick="openForm('skill')">+ new</button></div>
   ${skills.length ? `<div class="grid">${skills.map((s) =>
-    `<div class="skill"><h4>${esc(s.name)}</h4><p>${esc(s.what_it_does || s.description)}</p>
-     <div class="actions"><button class="btn-edit" data-kind="skill" data-slug="${esc(s.slug)}">Edit</button>
-     <button class="btn-del" data-kind="skill" data-slug="${esc(s.slug)}">Delete</button></div></div>`).join("")}</div>`
-    : `<div class="empty">No skills yet.</div>`}
+    `<div class="skill" data-kind="skill" data-slug="${esc(s.slug)}"><h4>${esc(s.name)}</h4><p>${esc(s.what_it_does || s.description)}</p>
+     ${s.tags.length ? `<div class="chips" style="margin-top:9px">${s.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : ""}
+     <div class="actions"><button class="btn-edit" data-kind="skill" data-slug="${esc(s.slug)}">edit</button>
+     <button class="btn-del" data-kind="skill" data-slug="${esc(s.slug)}">delete</button></div></div>`).join("")}</div>`
+    : `<div class="empty">no skills yet.</div>`}
 
-  <div class="sec-head"><h2>Prompts</h2><button class="btn-add" onclick="openForm('prompt')">+ Prompt</button></div>
+  <div class="sec-head"><h2>prompts</h2><span class="count">${prompts.length}</span><button class="btn-add" onclick="openForm('prompt')">+ new</button></div>
   ${prompts.length ? `<div class="grid">${prompts.map((p) =>
-    `<div class="prompt"><h4>${esc(p.name)}</h4><p>${esc(p.description)} ${p.category ? `· ${esc(p.category)}` : ""}</p>
-     <div class="actions"><button class="btn-edit" data-kind="prompt" data-slug="${esc(p.slug)}">Edit</button>
-     <button class="btn-del" data-kind="prompt" data-slug="${esc(p.slug)}">Delete</button></div></div>`).join("")}</div>`
-    : `<div class="empty">No prompts yet.</div>`}
+    `<div class="prompt" data-kind="prompt" data-slug="${esc(p.slug)}"><h4>${esc(p.name)}</h4><p>${esc(p.description)}${p.category ? ` <span class="tag">· ${esc(p.category)}</span>` : ""}</p>
+     <div class="actions"><button class="btn-edit" data-kind="prompt" data-slug="${esc(p.slug)}">edit</button>
+     <button class="btn-del" data-kind="prompt" data-slug="${esc(p.slug)}">delete</button></div></div>`).join("")}</div>`
+    : `<div class="empty">no prompts yet.</div>`}
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
@@ -155,16 +259,20 @@ const FIELDS = {
     </div>
     <div class="field"><label>Description</label><textarea id="f_description">\${txt(d.description)}</textarea></div>
     <div class="row2">
+      <div class="field"><label>Type</label><select id="f_type">\${opts(['','mobile','web','saas','bot','cli','api','library','desktop'], d.type)}</select></div>
       <div class="field"><label>Stage</label><select id="f_stage">\${opts(['idea','mvp','active','paused','shipped'], d.stage)}</select></div>
-      <div class="field"><label>Tests</label><select id="f_tests_status">\${opts(['none','partial','green'], d.tests_status)}</select></div>
     </div>
     <div class="row2">
+      <div class="field"><label>Tests</label><select id="f_tests_status">\${opts(['none','partial','green'], d.tests_status)}</select></div>
       <div class="field"><label>Language</label><input id="f_language" value="\${attr(d.language)}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Frameworks</label><input id="f_frameworks" value="\${attr((d.frameworks||[]).join(', '))}"><div class="hint">comma-separated</div></div>
       <div class="field"><label>Database</label><input id="f_database" value="\${attr(d.database)}"></div>
     </div>
-    <div class="field"><label>Frameworks</label><input id="f_frameworks" value="\${attr((d.frameworks||[]).join(', '))}"><div class="hint">comma-separated</div></div>
-    <div class="field"><label>Services</label><input id="f_services" value="\${attr((d.services||[]).join(', '))}"><div class="hint">comma-separated</div></div>
-    <div class="field"><label>Next steps</label><textarea id="f_next_steps">\${txt((d.next_steps||[]).join('\\n'))}</textarea><div class="hint">one per line</div></div>
+    <div class="field"><label>Services</label><textarea id="f_services">\${txt(svcLines(d.services))}</textarea><div class="hint">one per line — "provider: account" (account optional, e.g. supabase: Supabase 2)</div></div>
+    <div class="field"><label>Tasks</label><textarea id="f_tasks" style="min-height:100px">\${txt(taskLines(d.tasks))}</textarea><div class="hint">one per line — "[x] frontend: text" — [x]/[ ] = done/todo, optional category: frontend/backend/design/devops/qa/infra/content</div></div>
+    <div class="field"><label>Blockers</label><textarea id="f_blockers">\${txt((d.blockers||[]).join('\\n'))}</textarea><div class="hint">one per line — what must be resolved before launch</div></div>
     <div class="field"><label>GitHub URL</label><input id="f_github_url" value="\${attr(d.github_url)}"></div>
     <div class="row2">
       <div class="field"><label>Local path</label><input id="f_local_path" value="\${attr(d.local_path)}"></div>
@@ -189,17 +297,23 @@ const FIELDS = {
     <div class="field"><label>Body</label><textarea id="f_body" style="min-height:160px">\${txt(d.body)}</textarea></div>
     <div class="field"><label>Tags</label><input id="f_tags" value="\${attr((d.tags||[]).join(', '))}"><div class="hint">comma-separated</div></div>\`,
 };
-const ARRAYS = { project:['frameworks','services','next_steps'], skill:['tags'], prompt:['tags'] };
-const LINE_ARRAYS = { next_steps:1 };
+const ARRAYS = { project:['frameworks'], skill:['tags'], prompt:['tags'] };
 
 function attr(s){ return String(s??'').replace(/"/g,'&quot;'); }
 function txt(s){ return String(s??'').replace(/</g,'&lt;'); }
 function opts(arr, sel){ return arr.map(o=>\`<option \${o===sel?'selected':''}>\${o}</option>\`).join(''); }
 function autoslug(){ const s=$('f_slug'); if(s.disabled) return; s.value=slugify($('f_name').value); }
+const CATS=['frontend','backend','design','devops','qa','infra','content'];
+function svcLines(a){ return (a||[]).map(s=>s.account?s.provider+': '+s.account:s.provider).join('\\n'); }
+function taskLines(a){ return (a||[]).map(t=>'['+(t.done?'x':' ')+'] '+(t.category?t.category+': ':'')+t.text).join('\\n'); }
+function parseSvc(v){ return (v||'').split('\\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf(':'); return i>0?{provider:l.slice(0,i).trim(),account:l.slice(i+1).trim()}:{provider:l}; }); }
+function parseTasks(v){ return (v||'').split('\\n').map(l=>l.trim()).filter(Boolean).map(l=>{ let done=false; const m=l.match(/^\\[([ xX])\\]\\s*(.*)$/); if(m){done=/x/i.test(m[1]); l=m[2];} const cm=l.match(/^(\\w+):\\s*(.*)$/); if(cm&&CATS.includes(cm[1].toLowerCase())) return {text:cm[2],done,category:cm[1].toLowerCase()}; return {text:l,done}; }); }
+function lines(v){ return (v||'').split('\\n').map(s=>s.trim()).filter(Boolean); }
 
 let CUR = 'project';
 function openForm(kind, data){
   CUR = kind;
+  $('modal').className = 'modal';
   $('modal').innerHTML = \`<h3>\${data?'Edit':'New'} \${kind}</h3>\${FIELDS[kind](data||{})}
     <div class="modal-actions"><button onclick="closeForm()">Cancel</button>
     <button class="btn-add" onclick="save()">Save</button></div>\`;
@@ -207,6 +321,63 @@ function openForm(kind, data){
 }
 function closeForm(){ $('overlay').classList.remove('open'); }
 $('overlay').addEventListener('click', e => { if(e.target.id==='overlay') closeForm(); });
+
+// ---- Detail view -----------------------------------------------------------
+const STAGE = { idea:'#64748b', mvp:'#f59e0b', active:'#22c55e', paused:'#f97316', shipped:'#3b82f6' };
+function h(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function catTag(c){ return c?'<span class="cat cat-'+h(c)+'">'+h(c)+'</span>':''; }
+
+function detailProject(p){
+  const color = STAGE[p.stage]||'#64748b';
+  const stack = [p.language,...(p.frameworks||[]),p.database].filter(Boolean);
+  const tasks = p.tasks||[], done = tasks.filter(t=>t.done).length, total = tasks.length;
+  const pct = total?Math.round(done/total*100):0;
+  const cell = (label,val)=>'<div><label>'+label+'</label><div class="v">'+val+'</div></div>';
+  return \`<div class="dt" style="--stage:\${color}">
+    <div><h2>\${h(p.name)}</h2>
+      <div class="card-sub"><code class="slug">\${h(p.slug)}</code>\${p.type?'<span class="ptype">'+h(p.type)+'</span>':''}<span class="stage"><i class="dot" style="background:\${color}"></i>\${h(p.stage)}</span></div>
+    </div>
+    <p class="dt-desc">\${h(p.description)||'<i>no description</i>'}</p>
+    <div class="dt-grid">
+      \${cell('stack', stack.length?stack.map(s=>'<span class="chip">'+h(s)+'</span>').join(''):'—')}
+      \${cell('tests', '<span class="tests tests-'+h(p.tests_status)+'"><i class="tdot"></i>'+h(p.tests_status)+(p.tests_note?' · '+h(p.tests_note):'')+'</span>')}
+      \${cell('services', (p.services||[]).length?p.services.map(s=>'<span class="svc">'+h(s.provider)+(s.account?'<em>·'+h(s.account)+'</em>':'')+'</span>').join(''):'—')}
+      \${cell('github', p.github_url?'<a href="'+h(p.github_url)+'" target="_blank" rel="noopener">'+h(p.github_url)+'</a>':'—')}
+      \${cell('local path', '<span class="mono">'+(h(p.local_path)||'—')+'</span>')}
+      \${cell('keys ref', '<span class="mono">'+(h(p.keys_ref)||'—')+'</span>')}
+      \${cell('created', '<span class="mono">'+((p.created_at||'').slice(0,10)||'—')+'</span>')}
+      \${cell('last touched', '<span class="mono">'+((p.last_touched||'').slice(0,10)||'—')+'</span>')}
+    </div>
+    \${(p.blockers||[]).length?'<div class="blockers"><div class="blk-head">⚠ blockers</div><ul>'+p.blockers.map(b=>'<li>'+h(b)+'</li>').join('')+'</ul></div>':''}
+    \${total?'<div class="dt-tasks"><div class="tasks-head"><span class="next-label">tasks</span><span class="prog-num">'+done+'/'+total+' · '+pct+'%</span></div><div class="bar"><i style="width:'+pct+'%;background:'+color+'"></i></div><ul class="tasklist">'+tasks.map(t=>'<li class="'+(t.done?'done':'')+'">'+(t.done?'✓':'○')+' '+catTag(t.category)+h(t.text)+'</li>').join('')+'</ul></div>':''}
+    \${(p.next_steps||[]).length?'<div class="dt-tasks"><span class="next-label">next steps</span><ul class="tasklist">'+p.next_steps.map(n=>'<li>○ '+h(n)+'</li>').join('')+'</ul></div>':''}
+    <div class="modal-actions"><button onclick="closeForm()">close</button><button onclick="edit('project','\${p.slug}')">edit</button><button class="btn-del" onclick="del('project','\${p.slug}')">delete</button></div>
+  </div>\`;
+}
+function detailSkill(s){
+  return \`<div class="dt"><div><h2>\${h(s.name)}</h2><div class="card-sub"><code class="slug">\${h(s.slug)}</code></div></div>
+    <p class="dt-desc">\${h(s.what_it_does||s.description)||'—'}</p>
+    <div class="dt-grid"><div><label>location</label><div class="v"><span class="mono">\${h(s.location)||'—'}</span></div></div>
+      <div><label>description</label><div class="v">\${h(s.description)||'—'}</div></div></div>
+    \${(s.tags||[]).length?'<div class="chips">'+s.tags.map(t=>'<span class="chip">'+h(t)+'</span>').join('')+'</div>':''}
+    <div class="modal-actions"><button onclick="closeForm()">close</button><button onclick="edit('skill','\${s.slug}')">edit</button><button class="btn-del" onclick="del('skill','\${s.slug}')">delete</button></div></div>\`;
+}
+function detailPrompt(p){
+  return \`<div class="dt"><div><h2>\${h(p.name)}</h2><div class="card-sub"><code class="slug">\${h(p.slug)}</code>\${p.category?'<span class="ptype">'+h(p.category)+'</span>':''}</div></div>
+    <p class="dt-desc">\${h(p.description)||'—'}</p>
+    \${(p.tags||[]).length?'<div class="chips">'+p.tags.map(t=>'<span class="chip">'+h(t)+'</span>').join('')+'</div>':''}
+    <label class="dt-blabel">body</label><pre class="dt-body">\${h(p.body)||'—'}</pre>
+    <div class="modal-actions"><button onclick="closeForm()">close</button><button onclick="copyPrompt('\${p.slug}')">copy</button><button onclick="edit('prompt','\${p.slug}')">edit</button><button class="btn-del" onclick="del('prompt','\${p.slug}')">delete</button></div></div>\`;
+}
+const DETAIL = { project:detailProject, skill:detailSkill, prompt:detailPrompt };
+function openDetail(kind, slug){
+  const list = DATA[kind==='project'?'projects':kind+'s'];
+  const item = list.find(x=>x.slug===slug); if(!item) return;
+  $('modal').className = kind==='project' ? 'modal wide' : 'modal';
+  $('modal').innerHTML = DETAIL[kind](item);
+  $('overlay').classList.add('open');
+}
+function copyPrompt(slug){ const p=DATA.prompts.find(x=>x.slug===slug); if(p) navigator.clipboard?.writeText(p.body||''); }
 
 function edit(kind, slug){
   const list = DATA[kind==='project'?'projects':kind+'s'];
@@ -218,9 +389,9 @@ async function save(){
   $('modal').querySelectorAll('[id^=f_]').forEach(el => { obj[el.id.slice(2)] = el.value; });
   if(!obj.name || !obj.slug){ alert('Name and slug required'); return; }
   for(const a of ARRAYS[kind]){
-    const sep = LINE_ARRAYS[a] ? /\\n/ : /,/;
-    obj[a] = (obj[a]||'').split(sep).map(s=>s.trim()).filter(Boolean);
+    obj[a] = (obj[a]||'').split(',').map(s=>s.trim()).filter(Boolean);
   }
+  if(kind==='project'){ obj.services = parseSvc(obj.services); obj.tasks = parseTasks(obj.tasks); obj.blockers = lines(obj.blockers); }
   await fetch('/api/'+(kind==='project'?'projects':kind+'s')+'/save',
     {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(obj)});
   location.reload();
@@ -232,9 +403,16 @@ async function del(kind, slug){
   location.reload();
 }
 document.addEventListener('click', e => {
-  const b = e.target.closest('button'); if(!b) return;
-  if(b.classList.contains('btn-edit')) edit(b.dataset.kind, b.dataset.slug);
-  if(b.classList.contains('btn-del')) del(b.dataset.kind, b.dataset.slug);
+  const b = e.target.closest('button');
+  if(b){
+    if(b.classList.contains('btn-edit') && b.dataset.slug){ edit(b.dataset.kind, b.dataset.slug); }
+    else if(b.classList.contains('btn-del') && b.dataset.slug){ del(b.dataset.kind, b.dataset.slug); }
+    return;
+  }
+  if(e.target.closest('a')) return;             // links (repo) open normally
+  if(e.target.closest('.overlay')) return;      // clicks inside/over modal handled elsewhere
+  const card = e.target.closest('.card,.skill,.prompt');
+  if(card && card.dataset.slug) openDetail(card.dataset.kind, card.dataset.slug);
 });
 </script>
 </body></html>`);

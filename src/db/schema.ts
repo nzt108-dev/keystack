@@ -10,15 +10,18 @@ CREATE TABLE IF NOT EXISTS projects (
   slug         TEXT UNIQUE NOT NULL,
   name         TEXT NOT NULL,
   description  TEXT DEFAULT '',
+  type         TEXT DEFAULT '',              -- mobile | web | saas | bot | cli | api | library | desktop
   stage        TEXT DEFAULT 'idea',          -- idea | mvp | active | paused | shipped
+  blockers     TEXT DEFAULT '[]',            -- JSON array of blocker strings (must-know before launch)
   language     TEXT DEFAULT '',
   frameworks   TEXT DEFAULT '[]',            -- JSON array
   database     TEXT DEFAULT '',
-  services     TEXT DEFAULT '[]',            -- JSON array of provider names
+  services     TEXT DEFAULT '[]',            -- JSON array of {provider, account?}
+  tasks        TEXT DEFAULT '[]',            -- JSON array of {text, done}
   tests_status TEXT DEFAULT 'none',          -- none | partial | green
   tests_note   TEXT DEFAULT '',
   github_url   TEXT DEFAULT '',
-  next_steps   TEXT DEFAULT '[]',            -- JSON array
+  next_steps   TEXT DEFAULT '[]',            -- JSON array (legacy / "what's ahead")
   keys_ref     TEXT DEFAULT '',              -- path pointer only, NEVER values
   local_path   TEXT DEFAULT '',
   last_touched TEXT,                         -- ISO timestamp
