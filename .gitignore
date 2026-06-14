@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Local data — the user's project registry DB lives here, never commit it
+*.db
+*.db-journal
+*.sqlite
+data/
+
+# Env
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Personal / local only
+CLAUDE.md
+
+# Logs
+*.log
