@@ -16,3 +16,6 @@
 - tsx, typescript (dev)
 
 | src/scan/repo.ts | автозаполнение полей из репо (стек/сервисы/git/тесты) |
+
+## tests/ (vitest)
+db.test.ts (CRUD/search/JSON/keys_ref), scan.test.ts (детект стека), mcp.test.ts (интеграция через MCP client). Изолированная temp БД через tests/setup.ts. `npm test`.
