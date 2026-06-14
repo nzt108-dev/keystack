@@ -26,3 +26,13 @@ MCP-инструмент `scan_repo { path }` отдаёт предложени�
 
 ## db: формы дашборда
 upsertProject, deleteProject, deleteSkill, deletePrompt (+ существующие create/update/upsert).
+
+## db: расширения (v0.2–0.3)
+upsertProject (create-or-update), deleteProject/deleteSkill/deletePrompt.
+normServices(input) — строки|объекты → `ServiceRef[]` (backward-compat).
+normTasks(input) — строки|объекты → `Task[]` (с category).
+Типы: `ServiceRef {provider, account?}`, `Task {text, done, category?}`.
+
+## dashboard: detail-view (v0.3)
+Клик по карточке → модалка с полным контекстом (detailProject/detailSkill/detailPrompt в inline JS).
+Промпт-detail показывает body + copy. Карточки: data-kind/data-slug, click-listener открывает openDetail.
