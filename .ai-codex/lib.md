@@ -23,3 +23,6 @@ GET / (HTML витрина), /api/projects, /api/skills, /api/prompts. Порт 
 scanRepo(dir) → { language, frameworks, database, services, github_url, tests_status, detected_from }.
 Читает package.json/pubspec/requirements/pyproject/Cargo/go.mod, .env.example (сервисы по префиксам), git remote. Pure read.
 MCP-инструмент `scan_repo { path }` отдаёт предложение; агент подтверждает → create_project.
+
+## db: формы дашборда
+upsertProject, deleteProject, deleteSkill, deletePrompt (+ существующие create/update/upsert).

@@ -175,6 +175,15 @@ export function updateProject(slug: string, patch: Partial<Project>): Project | 
   return getProject(slug);
 }
 
+/** Create if the slug is new, otherwise update. Convenience for dashboard forms. */
+export function upsertProject(input: Partial<Project> & { slug: string; name: string }): Project {
+  return getProject(input.slug) ? updateProject(input.slug, input)! : createProject(input);
+}
+
+export function deleteProject(slug: string): boolean {
+  return getDb().prepare("DELETE FROM projects WHERE slug = ?").run(slug).changes > 0;
+}
+
 /** Free-text search across name, slug, language, frameworks and services. */
 export function searchProjects(query: string): Project[] {
   const q = `%${query.toLowerCase()}%`;
@@ -202,6 +211,10 @@ export function listSkills(): Skill[] {
 export function getSkill(slug: string): Skill | null {
   const r = getDb().prepare("SELECT * FROM skills WHERE slug = ?").get(slug);
   return r ? rowToSkill(r) : null;
+}
+
+export function deleteSkill(slug: string): boolean {
+  return getDb().prepare("DELETE FROM skills WHERE slug = ?").run(slug).changes > 0;
 }
 
 /** Insert or update by slug. */
@@ -252,6 +265,10 @@ export function listPrompts(): Prompt[] {
 export function getPrompt(slug: string): Prompt | null {
   const r = getDb().prepare("SELECT * FROM prompts WHERE slug = ?").get(slug);
   return r ? rowToPrompt(r) : null;
+}
+
+export function deletePrompt(slug: string): boolean {
+  return getDb().prepare("DELETE FROM prompts WHERE slug = ?").run(slug).changes > 0;
 }
 
 /** Insert or update by slug. */
