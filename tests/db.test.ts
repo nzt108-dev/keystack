@@ -112,6 +112,20 @@ describe("skills", () => {
     expect(listSkills()).toHaveLength(1);
   });
 
+  it("stores external skill references with docs and tags", () => {
+    const skill = upsertSkill({
+      slug: "xquik-social-automation",
+      name: "Xquik Social Automation",
+      description: "X/Twitter API and MCP workflows",
+      what_it_does: "Tracks Xquik docs, endpoint setup, and approval-gated publishing guidance.",
+      location: "https://docs.xquik.com/mcp/overview",
+      tags: ["xquik", "x-twitter", "mcp", "automation"],
+    });
+    expect(skill.location).toBe("https://docs.xquik.com/mcp/overview");
+    expect(skill.tags).toEqual(["xquik", "x-twitter", "mcp", "automation"]);
+    expect(getSkill("xquik-social-automation")!.what_it_does).toContain("approval-gated");
+  });
+
   it("deletes a skill", () => {
     upsertSkill({ slug: "x", name: "X" });
     expect(deleteSkill("x")).toBe(true);

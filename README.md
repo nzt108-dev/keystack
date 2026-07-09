@@ -60,6 +60,26 @@ command = "keystack-mcp"
 | `list_skills` / `get_skill` / `upsert_skill` | Your skill library |
 | `list_prompts` / `get_prompt` / `upsert_prompt` | Your prompt library |
 
+## Skill Seed Example
+
+Agents can store reusable tool context with `upsert_skill`. This example adds
+an approval-gated Xquik reference for X/Twitter search, monitoring, webhooks,
+and publishing workflows without storing API keys in KeyStack:
+
+```json
+{
+  "slug": "xquik-social-automation",
+  "name": "Xquik Social Automation",
+  "description": "Use Xquik's API and MCP server for X/Twitter search, extraction, monitoring, webhooks, and approval-gated publishing.",
+  "what_it_does": "Keeps the Xquik docs, MCP endpoint, API key location, and safety boundaries discoverable from KeyStack's skill registry.",
+  "location": "https://docs.xquik.com/mcp/overview",
+  "tags": ["xquik", "x-twitter", "mcp", "social-media", "automation"]
+}
+```
+
+Use `KEYSTACK_HOME` in tests or demos so example writes land in a disposable
+database.
+
 ## Data
 
 SQLite at `~/.keystack/keystack.db` (override with `KEYSTACK_HOME`). Never committed.
