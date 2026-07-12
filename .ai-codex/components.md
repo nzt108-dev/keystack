@@ -21,8 +21,15 @@
 ## tests/ (vitest)
 db.test.ts (CRUD/search/JSON/keys_ref), scan.test.ts (детект стека), mcp.test.ts (интеграция через MCP client). Изолированная temp БД через tests/setup.ts. `npm test`.
 
+## scripts/*.sh (vendored, CI-фикс 2026-07-11) — общие инструменты, читают/пишут ту же БД `~/.keystack/keystack.db`
+FORGE wave1 story 2/3/5/6 (детали — lib.md). Живут ВНУТРИ этого репо (`scripts/`), чтобы CI (GitHub
+Actions runner, нет `~/.claude/`) мог запускать fixture-тесты напрямую; `~/.claude/scripts/` держит
+только симлинки на эти файлы (`ln -sf`) для остальных machine-local потребителей:
+- `scripts/keystack-scan.sh` — dev-state сканер
+- `scripts/keystack-export-table.sh` — БД → таблица «🗂️ Проекты» в CLAUDE.md
+- `scripts/keystack-export-track-a.sh` — БД → `~/.claude/track-a-paths.txt` (список Track A путей)
+- `scripts/keystack-sync-skills.sh` — sync таблицы skills из `~/.claude/skills/*/SKILL.md`
+
 ## Внешние механизмы (живут вне репо, читают/пишут ту же БД `~/.keystack/keystack.db`)
-FORGE wave1 story 6 (детали — lib.md):
-- `~/.claude/scripts/keystack-export-track-a.sh` — БД → `~/.claude/track-a-paths.txt` (список Track A путей)
 - `~/.claude/hooks/phase0-gate.sh` — PreToolUse(Write|Edit|MultiEdit) хук, warning если Track A проект без `.ai-codex/architecture.md` (fail-open, никогда не блокирует); зарегистрирован в `~/.claude/settings.json`
-- `~/Library/LaunchAgents/dev.nzt108.keystack-scan.plist` — ежесуточно 05:30: `keystack-scan.sh --all --fast` + `keystack-export-track-a.sh`
+- `~/Library/LaunchAgents/dev.nzt108.keystack-scan.plist` — ежесуточно 05:30: (симлинк) `keystack-scan.sh --all --fast` + `keystack-export-track-a.sh`

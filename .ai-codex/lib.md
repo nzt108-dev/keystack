@@ -63,8 +63,11 @@ normTasks(input) — строки|объекты → `Task[]` (с category).
 Клик по карточке → модалка с полным контекстом (detailProject/detailSkill/detailPrompt в inline JS).
 Промпт-detail показывает body + copy. Карточки: data-kind/data-slug, click-listener открывает openDetail.
 
-## ~/.claude/scripts/keystack-scan.sh — dev-state сканер (FORGE wave1 §2.4, story 2)
-Живёт ВНЕ этого репо (общий инструмент для всех проектов, вызывается /sync, LaunchAgent, вручную).
+## scripts/keystack-scan.sh — dev-state сканер (FORGE wave1 §2.4, story 2)
+Живёт ВНУТРИ этого репо (`scripts/keystack-scan.sh`); `~/.claude/scripts/keystack-scan.sh` —
+симлинк на репо-версию (CI-фикс 2026-07-11: репо теперь единственный источник правды, домашняя
+папка только симлинкует — иначе GitHub-раннер получает ENOENT на fixture-тестах, у него нет
+`~/.claude/`). Общий инструмент для всех проектов, вызывается /sync, LaunchAgent, вручную.
 Детерминированный bash + sqlite3 CLI, БЕЗ LLM, пишет напрямую в `$KEYSTACK_HOME/keystack.db` (тот же
 файл, что и `src/db/index.ts`, включая `KEYSTACK_HOME` контракт).
 
@@ -123,8 +126,9 @@ iwanttoeatair, brieftube, darshan, astro-psiholog, architect-portfolio — ро�
 — B (default). Первый прогон 11.07: 30 строк (10 существовавших + 20 новых), 0 расхождений при
 повторном запуске (idempotency verified).
 
-## ~/.claude/scripts/keystack-sync-skills.sh (FORGE wave1, story 3) — sync таблицы skills
-Живёт ВНЕ репо (как keystack-scan.sh) — общий инструмент. Детерминированный bash+sqlite3+perl,
+## scripts/keystack-sync-skills.sh (FORGE wave1, story 3) — sync таблицы skills
+Живёт ВНУТРИ этого репо (как keystack-scan.sh, см. выше — `~/.claude/scripts/keystack-sync-skills.sh`
+симлинк на репо-версию). Общий инструмент. Детерминированный bash+sqlite3+perl,
 БЕЗ LLM. Источник — ТОЛЬКО `~/.claude/skills/*/SKILL.md` (глобальные скиллы); скиллы плагинов и
 проектных `.claude/skills/` — другой неймспейс, не трогается (различается по колонке `location`:
 только строки с `location == '~/.claude/skills'` (буквальная строка с тильдой, НЕ раскрытый
@@ -146,9 +150,10 @@ screen, playwright) — ранее вручную занесённые в БД �
 реально это плагинные/builtin-скиллы без файла на диске в этой папке; удалены. Итог: 3 скилла
 (motion-landing, sec-check, watch).
 
-## ~/.claude/scripts/keystack-export-table.sh (FORGE wave1, story 5) — генерация таблицы CLAUDE.md
-Живёт ВНЕ репо (как keystack-scan.sh/keystack-sync-skills.sh) — общий инструмент, детерминированный
-bash+sqlite3+perl, БЕЗ LLM. Обратное направление к `scripts/keystack-seed.ts`: та читала CLAUDE.md
+## scripts/keystack-export-table.sh (FORGE wave1, story 5) — генерация таблицы CLAUDE.md
+Живёт ВНУТРИ этого репо (как keystack-scan.sh/keystack-sync-skills.sh, симлинк в
+`~/.claude/scripts/`) — общий инструмент, детерминированный bash+sqlite3+perl, БЕЗ LLM.
+Обратное направление к `scripts/keystack-seed.ts`: та читала CLAUDE.md
 → БД (одноразовый bootstrap, story 3); эта читает БД → пишет секцию «## 🗂️ Проекты» в CLAUDE.md
 (рецидивирующий путь, вызывается из `/sync`).
 
@@ -191,9 +196,9 @@ workflows/` — ложно попадал в список руками), ста�
 babysit'ил). Остальная логика скрипта (gh api на дефолтную ветку, диагноз/фикс через `claude -p`,
 никогда не пушит в main) — не менялась.
 
-## ~/.claude/scripts/keystack-export-track-a.sh (FORGE wave1, story 6) — track-a-paths.txt из БД
-Живёт ВНЕ репо (как keystack-scan.sh/export-table.sh) — общий инструмент, детерминированный
-bash+sqlite3, БЕЗ LLM. `SELECT local_path FROM projects WHERE track='A' AND local_path != ''` →
+## scripts/keystack-export-track-a.sh (FORGE wave1, story 6) — track-a-paths.txt из БД
+Живёт ВНУТРИ этого репо (как keystack-scan.sh/export-table.sh, симлинк в `~/.claude/scripts/`) —
+общий инструмент, детерминированный bash+sqlite3, БЕЗ LLM. `SELECT local_path FROM projects WHERE track='A' AND local_path != ''` →
 `~/.claude/track-a-paths.txt` (один путь на строку, env `TRACK_A_FILE` — тестовый seam). Единственное
 назначение — дать быстрому PreToolUse-хуку (`phase0-gate.sh`, ниже) список Track A путей БЕЗ
 обращения к sqlite3 на каждый Edit. Первый прогон 11.07: 8 путей (architect-portfolio,

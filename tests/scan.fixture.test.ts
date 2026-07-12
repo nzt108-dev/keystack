@@ -1,21 +1,23 @@
 /**
- * Fixture tests for `~/.claude/scripts/keystack-scan.sh` — the deterministic bash+sqlite3
+ * Fixture tests for `scripts/keystack-scan.sh` — the deterministic bash+sqlite3
  * dev-state scanner (FORGE wave1 §2.4, story 2 of .ai-codex/specs/spec-forge-wave1.md).
  *
- * The script is NOT part of this repo (it lives in ~/.claude/scripts/, shared across all of the
- * user's projects — installed by /sync, run nightly by a LaunchAgent), so this suite drives the
- * real, installed script end-to-end via child_process against a temp project tree + the isolated
- * per-file KEYSTACK_HOME that tests/setup.ts already points at. That is the "read model" this repo
- * owns: the scan.sh writes rows, this repo's db/index.ts reads them back for assertions.
+ * The script is vendored into this repo (scripts/keystack-scan.sh) and symlinked from
+ * ~/.claude/scripts/ (shared across all of the user's projects — installed by /sync, run nightly
+ * by a LaunchAgent), so this suite drives the real script end-to-end via child_process against a
+ * temp project tree + the isolated per-file KEYSTACK_HOME that tests/setup.ts already points at.
+ * That is the "read model" this repo owns: the scan.sh writes rows, this repo's db/index.ts reads
+ * them back for assertions.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getDb, createProject, getProject, listSpecsByProject } from "../src/db/index.js";
 
-const SCAN = join(homedir(), ".claude", "scripts", "keystack-scan.sh");
+const SCAN = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "keystack-scan.sh");
 
 let root: string;
 let n = 0;

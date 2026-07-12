@@ -1,20 +1,22 @@
 /**
- * Fixture tests for `~/.claude/scripts/keystack-export-table.sh` — the deterministic bash+sqlite3
+ * Fixture tests for `scripts/keystack-export-table.sh` — the deterministic bash+sqlite3
  * table generator (FORGE wave1 §6, story 5 of .ai-codex/specs/spec-forge-wave1.md).
  *
- * Like scan.fixture.test.ts, the script itself lives outside this repo (~/.claude/scripts/,
- * shared across all projects). This suite drives the real, installed script end-to-end via
- * child_process against a temp CLAUDE.md + this test file's isolated KEYSTACK_HOME (tests/setup.ts),
- * using the CLAUDE_MD / GENERATED_FALLBACK env seams the script exposes for exactly this purpose.
+ * Like scan.fixture.test.ts, the script is vendored into this repo (scripts/keystack-export-table.sh)
+ * and symlinked from ~/.claude/scripts/ (shared across all projects). This suite drives the real
+ * script end-to-end via child_process against a temp CLAUDE.md + this test file's isolated
+ * KEYSTACK_HOME (tests/setup.ts), using the CLAUDE_MD / GENERATED_FALLBACK env seams the script
+ * exposes for exactly this purpose.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getDb, createProject } from "../src/db/index.js";
 
-const EXPORT = join(homedir(), ".claude", "scripts", "keystack-export-table.sh");
+const EXPORT = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "keystack-export-table.sh");
 
 let root: string;
 let n = 0;

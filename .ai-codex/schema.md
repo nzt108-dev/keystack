@@ -8,7 +8,7 @@
 
 Досеяно (story 3, 11.07): 30 проектов (10 старых + 20 новых из таблицы CLAUDE.md), track
 проставлен (8×A / 22×B), первый `--all --fast` прогнан (`scripts/keystack-seed.ts`,
-`~/.claude/scripts/keystack-sync-skills.sh` — см. `.ai-codex/lib.md`).
+`scripts/keystack-sync-skills.sh` — см. `.ai-codex/lib.md`).
 
 ## projects
 slug (UNIQUE), name, description,
