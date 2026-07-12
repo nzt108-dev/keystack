@@ -24,7 +24,16 @@ import {
   listPrompts,
   getPrompt,
   upsertPrompt,
+  listSpecsByProject,
+  countOpenSpecsByProject,
+  type Spec,
 } from "../db/index.js";
+
+// FORGE wave1 §5: a spec is "open" when it still has unfinished stories, or none tallied yet.
+// Same predicate as the SQL aggregate in countOpenSpecsByProject — kept in sync by the spec
+// (.ai-codex/specs/spec-forge-wave1.md, "Открытая спека" MINOR decision #2).
+const isSpecOpen = (s: Pick<Spec, "stories_total" | "stories_done">): boolean =>
+  s.stories_total === 0 || s.stories_done < s.stories_total;
 import { scanRepo } from "../scan/repo.js";
 
 const server = new McpServer({ name: "keystack", version: "0.1.0" });
@@ -43,22 +52,31 @@ server.registerTool(
   "list_projects",
   {
     description:
-      "Overview of all projects in the registry (name, slug, stage, stack, services, last touched). Call this to see the whole portfolio map.",
+      "Overview of all projects in the registry (name, slug, stage, stack, services, last touched, track, health_score, open_specs). Call this to see the whole portfolio map.",
     inputSchema: {},
   },
-  async () => json(listProjects())
+  async () => {
+    const projects = listProjects();
+    const openMap = countOpenSpecsByProject();
+    return json(projects.map((p) => ({ ...p, open_specs: openMap[p.slug] ?? 0 })));
+  }
 );
 
 server.registerTool(
   "get_project",
   {
     description:
-      "Full context for one project by slug: description, stage, stack (language/frameworks/db), services, tests, next steps, github, keys_ref. Use at the start of work on a project.",
+      "Full context for one project by slug: description, stage, stack (language/frameworks/db), services, tests, next steps, github, keys_ref, dev-state (track/health_score/has_*), and its .ai-codex spec registry (specs[], open_specs). Use at the start of work on a project.",
     inputSchema: { slug: z.string().describe("Project slug") },
   },
   async ({ slug }) => {
     const p = getProject(slug);
-    return p ? json(p) : fail(`No project '${slug}'. Use list_projects to see slugs.`);
+    if (!p) return fail(`No project '${slug}'. Use list_projects to see slugs.`);
+    const specs = listSpecsByProject(slug).map(({ file, title, stories_total, stories_done, has_block }) => ({
+      file, title, stories_total, stories_done, has_block,
+    }));
+    const open_specs = specs.filter(isSpecOpen).length;
+    return json({ ...p, specs, open_specs });
   }
 );
 

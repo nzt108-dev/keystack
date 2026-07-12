@@ -9,8 +9,22 @@ import {
   listProjects, upsertProject, deleteProject,
   listSkills, upsertSkill, deleteSkill,
   listPrompts, upsertPrompt, deletePrompt,
+  countOpenSpecsByProject,
   type Project,
 } from "../db/index.js";
+
+// FORGE wave1 §5 (open_specs) + owner-requested traffic light on health_score — dashboard
+// display only, same "open" predicate as the MCP payload (src/mcp/server.ts isSpecOpen).
+type ProjectWithSpecs = Project & { open_specs: number };
+function withOpenSpecs(projects: Project[]): ProjectWithSpecs[] {
+  const openMap = countOpenSpecsByProject();
+  return projects.map((p) => ({ ...p, open_specs: openMap[p.slug] ?? 0 }));
+}
+function healthColor(score: number): string {
+  if (score < 50) return "#ef4444";
+  if (score < 80) return "#f59e0b";
+  return "#22c55e";
+}
 
 const app = Fastify({ logger: false });
 const PORT = Number(process.env.KEYSTACK_PORT ?? 4319);
@@ -30,7 +44,7 @@ const ICON = {
   layers: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
 };
 
-function projectCard(p: Project): string {
+function projectCard(p: ProjectWithSpecs): string {
   const color = stageColor[p.stage] ?? "#64748b";
   const chips = [p.language, ...p.frameworks, p.database].filter(Boolean)
     .map((t) => `<span class="chip">${esc(t)}</span>`).join("");
@@ -73,6 +87,8 @@ function projectCard(p: Project): string {
     ${tasksBlock}
     <div class="meta">
       <span class="tests tests-${esc(p.tests_status)}"><i class="tdot"></i>tests ${esc(p.tests_status)}</span>
+      <span class="health" style="color:${healthColor(p.health_score)}"><i class="tdot" style="background:${healthColor(p.health_score)}"></i>health ${p.health_score}</span>
+      ${p.open_specs > 0 ? `<span class="specs">${p.open_specs} open spec${p.open_specs === 1 ? "" : "s"}</span>` : ""}
       ${p.github_url ? `<a href="${esc(p.github_url)}" target="_blank" rel="noopener">${ICON.github} repo</a>` : ""}
     </div>
     <div class="actions">
@@ -83,7 +99,7 @@ function projectCard(p: Project): string {
 }
 
 // ---- API: read -------------------------------------------------------------
-app.get("/api/projects", async () => listProjects());
+app.get("/api/projects", async () => withOpenSpecs(listProjects()));
 app.get("/api/skills", async () => listSkills());
 app.get("/api/prompts", async () => listPrompts());
 
@@ -96,7 +112,7 @@ app.post("/api/prompts/save", async (req) => upsertPrompt(req.body as any));
 app.post("/api/prompts/delete", async (req) => ({ ok: deletePrompt((req.body as any).slug) }));
 
 app.get("/", async (_req, reply) => {
-  const projects = listProjects();
+  const projects = withOpenSpecs(listProjects());
   const skills = listSkills();
   const prompts = listPrompts();
   const data = JSON.stringify({ projects, skills, prompts }).replace(/</g, "\\u003c");
@@ -175,6 +191,8 @@ app.get("/", async (_req, reply) => {
   .tests { display:flex; align-items:center; gap:5px; color:var(--dim); }
   .tests .tdot { width:6px; height:6px; border-radius:50%; background:currentColor; }
   .tests-green { color:#22c55e; } .tests-partial { color:#f59e0b; } .tests-none { color:#5a6678; }
+  .health { display:flex; align-items:center; gap:5px; }
+  .specs { color:#f59e0b; }
   .next { margin-top:13px; padding-top:11px; border-top:1px solid var(--line); }
   .next-label { font:10px var(--mono); text-transform:uppercase; letter-spacing:1px; color:var(--accent); }
   .next ul { margin:5px 0 0; padding-left:16px; color:var(--dim); font-size:12px; }

@@ -5,10 +5,11 @@ import {
   upsertProject, deleteProject, searchProjects,
   listSkills, getSkill, upsertSkill, deleteSkill,
   listPrompts, getPrompt, upsertPrompt, deletePrompt,
+  upsertSpec, listSpecsByProject, deleteSpecsNotIn,
 } from "../src/db/index.js";
 
 beforeEach(() => {
-  getDb().exec("DELETE FROM projects; DELETE FROM skills; DELETE FROM prompts;");
+  getDb().exec("DELETE FROM projects; DELETE FROM skills; DELETE FROM prompts; DELETE FROM specs;");
 });
 
 describe("projects", () => {
@@ -98,6 +99,115 @@ describe("projects", () => {
     // schema has no column for secret values at all
     const cols = getDb().prepare("PRAGMA table_info(projects)").all() as { name: string }[];
     expect(cols.some((c) => /value|secret/i.test(c.name))).toBe(false);
+  });
+});
+
+describe("projects — FORGE wave1 contract fields (§2.2)", () => {
+  it("defaults new contract fields on create", () => {
+    const p = createProject({ slug: "w1", name: "W1" });
+    expect(p.track).toBe("B");
+    expect(p.has_architecture).toBe(false);
+    expect(p.has_invariants).toBe(false);
+    expect(p.has_design_md).toBe(false);
+    expect(p.has_ci).toBe(false);
+    expect(p.tests_count).toBe(0);
+    expect(p.tests_green).toBe(false);
+    expect(p.last_audit_date).toBe("");
+    expect(p.open_crit).toBe(0);
+    expect(p.open_high).toBe(0);
+    expect(p.health_score).toBe(0);
+  });
+
+  it("stores and round-trips explicit contract fields", () => {
+    const p = createProject({
+      slug: "w2", name: "W2", track: "A",
+      has_architecture: true, has_invariants: true, has_design_md: true, has_ci: true,
+      tests_count: 42, tests_green: true,
+      last_audit_date: "2026-07-06", open_crit: 1, open_high: 3, health_score: 77,
+    });
+    expect(p.track).toBe("A");
+    expect(p.has_architecture).toBe(true);
+    expect(p.has_invariants).toBe(true);
+    expect(p.has_design_md).toBe(true);
+    expect(p.has_ci).toBe(true);
+    expect(p.tests_count).toBe(42);
+    expect(p.tests_green).toBe(true);
+    expect(p.last_audit_date).toBe("2026-07-06");
+    expect(p.open_crit).toBe(1);
+    expect(p.open_high).toBe(3);
+    expect(p.health_score).toBe(77);
+  });
+
+  it("partial-updates contract fields without touching the rest", () => {
+    createProject({ slug: "w3", name: "W3" });
+    const upd = updateProject("w3", { has_ci: true, tests_count: 10, tests_green: true, health_score: 55 })!;
+    expect(upd.has_ci).toBe(true);
+    expect(upd.tests_count).toBe(10);
+    expect(upd.tests_green).toBe(true);
+    expect(upd.health_score).toBe(55);
+    expect(upd.track).toBe("B"); // untouched
+    expect(upd.has_architecture).toBe(false); // untouched
+  });
+});
+
+describe("specs", () => {
+  it("upserts a spec and reads it back with defaults", () => {
+    const s = upsertSpec({ project_slug: "faithly", file: ".ai-codex/specs/spec-x.md" });
+    expect(s.project_slug).toBe("faithly");
+    expect(s.file).toBe(".ai-codex/specs/spec-x.md");
+    expect(s.title).toBe("");
+    expect(s.stories_total).toBe(0);
+    expect(s.stories_done).toBe(0);
+    expect(s.has_block).toBe(false);
+    expect(s.scanned_at).toBeTruthy(); // defaults to now() when not provided
+  });
+
+  it("upserts by (project_slug, file) — no duplicate rows, last write wins", () => {
+    upsertSpec({ project_slug: "faithly", file: "a.md", title: "A", stories_total: 5, stories_done: 1 });
+    upsertSpec({
+      project_slug: "faithly", file: "a.md", title: "A v2",
+      stories_total: 5, stories_done: 3, has_block: true,
+    });
+    const rows = listSpecsByProject("faithly");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("A v2");
+    expect(rows[0].stories_done).toBe(3);
+    expect(rows[0].has_block).toBe(true);
+  });
+
+  it("the same filename in different projects does not collide", () => {
+    upsertSpec({ project_slug: "faithly", file: "spec-x.md" });
+    upsertSpec({ project_slug: "crewup", file: "spec-x.md" });
+    expect(listSpecsByProject("faithly")).toHaveLength(1);
+    expect(listSpecsByProject("crewup")).toHaveLength(1);
+  });
+
+  it("lists specs scoped to the requested project only", () => {
+    upsertSpec({ project_slug: "faithly", file: "a.md" });
+    upsertSpec({ project_slug: "faithly", file: "b.md" });
+    upsertSpec({ project_slug: "crewup", file: "c.md" });
+    expect(listSpecsByProject("faithly").map((s) => s.file).sort()).toEqual(["a.md", "b.md"]);
+  });
+
+  it("deleteSpecsNotIn removes vanished spec files but keeps the rest", () => {
+    upsertSpec({ project_slug: "faithly", file: "a.md" });
+    upsertSpec({ project_slug: "faithly", file: "b.md" });
+    upsertSpec({ project_slug: "faithly", file: "c.md" });
+    upsertSpec({ project_slug: "crewup", file: "a.md" }); // different project, must survive
+
+    const deleted = deleteSpecsNotIn("faithly", ["a.md", "c.md"]);
+
+    expect(deleted).toBe(1);
+    expect(listSpecsByProject("faithly").map((s) => s.file).sort()).toEqual(["a.md", "c.md"]);
+    expect(listSpecsByProject("crewup")).toHaveLength(1); // untouched
+  });
+
+  it("deleteSpecsNotIn with an empty file list clears all specs for that project only", () => {
+    upsertSpec({ project_slug: "faithly", file: "a.md" });
+    upsertSpec({ project_slug: "crewup", file: "z.md" });
+    deleteSpecsNotIn("faithly", []);
+    expect(listSpecsByProject("faithly")).toHaveLength(0);
+    expect(listSpecsByProject("crewup")).toHaveLength(1);
   });
 });
 
