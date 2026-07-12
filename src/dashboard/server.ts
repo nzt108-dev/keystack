@@ -5,13 +5,19 @@
  * The agent edits via MCP; this is the manual UI.
  */
 import Fastify from "fastify";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  listProjects, upsertProject, deleteProject,
+  listProjects, upsertProject, deleteProject, getProject,
   listSkills, upsertSkill, deleteSkill,
   listPrompts, upsertPrompt, deletePrompt,
   countOpenSpecsByProject,
   type Project,
 } from "../db/index.js";
+import { readFlowmap, FLOWMAP_STALE_DAYS, type FlowmapSummary } from "./flowmap.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 // FORGE wave1 §5 (open_specs) + owner-requested traffic light on health_score — dashboard
 // display only, same "open" predicate as the MCP payload (src/mcp/server.ts isSpecOpen).
@@ -89,6 +95,7 @@ function projectCard(p: ProjectWithSpecs): string {
       <span class="tests tests-${esc(p.tests_status)}"><i class="tdot"></i>tests ${esc(p.tests_status)}</span>
       <span class="health" style="color:${healthColor(p.health_score)}"><i class="tdot" style="background:${healthColor(p.health_score)}"></i>health ${p.health_score}</span>
       ${p.open_specs > 0 ? `<span class="specs">${p.open_specs} open spec${p.open_specs === 1 ? "" : "s"}</span>` : ""}
+      ${p.has_flowmap ? `<a href="/map/${esc(p.slug)}">🗺 карта${p.map_crit > 0 ? ` <b class="mapcrit">${p.map_crit} CRIT</b>` : ""}</a>` : ""}
       ${p.github_url ? `<a href="${esc(p.github_url)}" target="_blank" rel="noopener">${ICON.github} repo</a>` : ""}
     </div>
     <div class="actions">
@@ -102,6 +109,128 @@ function projectCard(p: ProjectWithSpecs): string {
 app.get("/api/projects", async () => withOpenSpecs(listProjects()));
 app.get("/api/skills", async () => listSkills());
 app.get("/api/prompts", async () => listPrompts());
+
+// ---- vendored mermaid (spec-live-map.md story 1: dashboard must work offline, no CDN) --------
+// Sourced from the `mermaid` npm package's browser bundle (dist/mermaid.min.js), committed into
+// src/dashboard/vendor/ and copied to dist/dashboard/vendor/ by `npm run build` (see package.json).
+let mermaidJsCache: Buffer | null = null;
+app.get("/vendor/mermaid.min.js", async (_req, reply) => {
+  if (!mermaidJsCache) {
+    mermaidJsCache = readFileSync(join(HERE, "vendor", "mermaid.min.js"));
+  }
+  reply.type("application/javascript; charset=utf-8").send(mermaidJsCache);
+});
+
+// ---- /map/:slug — live map page (spec-live-map.md story 1, Фаза A) ----------------------------
+function mapPage(project: Project | null, slug: string, flowmap: FlowmapSummary | null): string {
+  if (!project) {
+    return `<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<title>keystack — карта</title>${MAP_STYLE}</head><body>
+<div class="map-wrap"><a class="back" href="/">← keystack</a>
+<div class="empty">проект «${esc(slug)}» не найден в реестре.</div></div>
+</body></html>`;
+  }
+
+  const fm = flowmap!;
+  const staleBadge = fm.exists && fm.staleDays !== null && fm.staleDays > FLOWMAP_STALE_DAYS
+    ? `<span class="badge stale">устарела · ${fm.staleDays} дн.</span>` : "";
+
+  let body: string;
+  if (!fm.exists) {
+    body = `<div class="empty">🗺 карта не сгенерирована — прогони <code>/sync</code> для этого проекта, чтобы собрать <code>.flowmap/</code> артефакты.</div>`;
+  } else {
+    const issuesList = [
+      ...fm.issues.map((i) => `<li class="issue issue-${i.severity}"><b>${i.severity.toUpperCase()}</b> · ${esc(i.kind)} — ${esc(i.message)}</li>`),
+      ...fm.archIssues.map((m) => `<li class="issue issue-warn"><b>WARN</b> · граф — ${esc(m)}</li>`),
+    ].join("");
+
+    const statsBits = [
+      fm.archStats ? `${fm.archStats.nodes} узлов / ${fm.archStats.edges} рёбер (архитектура)` : "",
+      fm.uiStats ? `${fm.uiStats.screens} экранов / ${fm.uiStats.elements} элементов (UI-flow)` : "",
+    ].filter(Boolean).join(" · ");
+
+    const mmdBlock = fm.mmd
+      ? `<div id="mermaid-render" class="mermaid-box"><span class="map-loading">рендер…</span></div>
+         <script type="application/json" id="mmd-data">${JSON.stringify(fm.mmd).replace(/</g, "\\u003c")}</script>
+         <script src="/vendor/mermaid.min.js"></script>
+         <script>
+           (async () => {
+             const raw = document.getElementById('mmd-data');
+             const el = document.getElementById('mermaid-render');
+             const mmd = raw ? JSON.parse(raw.textContent) : null;
+             if (!mmd || !el) return;
+             try {
+               window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+               const { svg } = await window.mermaid.render('keystack-mmd', mmd);
+               el.innerHTML = svg;
+             } catch (err) {
+               el.outerHTML = '<div class="map-error">⚠ карта повреждена — Mermaid не смог разобрать flowmap.mmd'
+                 + (err && err.message ? ': ' + String(err.message).replace(/</g,'&lt;') : '') + '</div>';
+             }
+           })();
+         </script>`
+      : `<div class="map-error">⚠ ${esc(fm.mmdError || "flowmap.mmd недоступен")}</div>`;
+
+    body = `<div class="verdict">
+        <span class="badge ${fm.crit > 0 ? "crit" : "ok"}">${fm.crit} CRIT</span>
+        <span class="badge ${fm.warn > 0 ? "warn" : "ok"}">${fm.warn} WARN</span>
+        ${staleBadge}
+        ${statsBits ? `<span class="stats">${esc(statsBits)}</span>` : ""}
+      </div>
+      ${issuesList ? `<ul class="issues">${issuesList}</ul>` : ""}
+      ${mmdBlock}`;
+  }
+
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>keystack — карта · ${esc(project.name)}</title>${MAP_STYLE}</head><body>
+<div class="map-wrap">
+  <a class="back" href="/">← keystack</a>
+  <h1>${esc(project.name)} <code class="slug">${esc(project.slug)}</code></h1>
+  ${body}
+</div>
+</body></html>`;
+}
+
+const MAP_STYLE = `<style>
+  :root { --bg:#0f172a; --surface:#192234; --ink:#f1f5f9; --dim:#8a98ad; --line:#1f2a3c;
+    --accent:#22c55e; --danger:#ef4444; --warnc:#f59e0b;
+    --mono:'Fira Code',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:-apple-system,Segoe UI,Roboto,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 var(--sans); }
+  .map-wrap { max-width:1100px; margin:0 auto; padding:24px 28px 60px; }
+  .back { color:var(--dim); text-decoration:none; font:12px var(--mono); }
+  .back:hover { color:var(--ink); }
+  h1 { font:600 20px var(--sans); margin:14px 0 18px; display:flex; align-items:center; gap:10px; }
+  .slug { font:12px var(--mono); color:var(--dim); font-weight:400; }
+  .empty { color:var(--dim); padding:22px; border:1px dashed var(--line); border-radius:10px; font:13px var(--mono); }
+  .verdict { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .badge { font:12px var(--mono); padding:3px 10px; border-radius:20px; border:1px solid var(--line); color:var(--dim); }
+  .badge.crit { color:#fecaca; background:rgba(239,68,68,.15); border-color:rgba(239,68,68,.4); }
+  .badge.warn { color:#fde68a; background:rgba(245,158,11,.15); border-color:rgba(245,158,11,.4); }
+  .badge.ok { color:#bbf7d0; background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.3); }
+  .badge.stale { color:#c7d2e0; background:rgba(148,163,184,.12); }
+  .stats { font:12px var(--mono); color:var(--dim); }
+  .issues { list-style:none; margin:0 0 20px; padding:0; }
+  .issue { font:12px var(--mono); padding:6px 10px; border-left:2px solid var(--line); margin-bottom:4px; color:var(--dim); }
+  .issue-crit { border-color:var(--danger); color:#f3b5b0; }
+  .issue-warn { border-color:var(--warnc); color:#fde68a; }
+  .mermaid-box { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:20px; overflow:auto; }
+  .map-loading { color:var(--dim); font:12px var(--mono); }
+  .map-error { color:#f3b5b0; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.3); border-radius:10px; padding:16px; font:13px var(--mono); }
+</style>`;
+
+app.get("/map/:slug", async (req, reply) => {
+  const { slug } = req.params as { slug: string };
+  const project = getProject(slug);
+  if (!project) {
+    reply.code(404).type("text/html").send(mapPage(null, slug, null));
+    return;
+  }
+  const flowmap = readFlowmap(project.local_path);
+  reply.type("text/html").send(mapPage(project, slug, flowmap));
+});
 
 // ---- API: write ------------------------------------------------------------
 app.post("/api/projects/save", async (req) => upsertProject(req.body as any));
@@ -193,6 +322,7 @@ app.get("/", async (_req, reply) => {
   .tests-green { color:#22c55e; } .tests-partial { color:#f59e0b; } .tests-none { color:#5a6678; }
   .health { display:flex; align-items:center; gap:5px; }
   .specs { color:#f59e0b; }
+  .mapcrit { color:#f87171; font-weight:600; }
   .next { margin-top:13px; padding-top:11px; border-top:1px solid var(--line); }
   .next-label { font:10px var(--mono); text-transform:uppercase; letter-spacing:1px; color:var(--accent); }
   .next ul { margin:5px 0 0; padding-left:16px; color:var(--dim); font-size:12px; }
@@ -436,6 +566,13 @@ document.addEventListener('click', e => {
 </body></html>`);
 });
 
-app.listen({ port: PORT, host: "127.0.0.1" }).then(() => {
-  console.error(`[keystack] dashboard → http://127.0.0.1:${PORT}`);
-});
+// Only bind a port when run directly (`npm run dashboard` / `node dist/dashboard/server.js`) —
+// not when imported by tests, which use Fastify's app.inject() against the same route tree.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  app.listen({ port: PORT, host: "127.0.0.1" }).then(() => {
+    console.error(`[keystack] dashboard → http://127.0.0.1:${PORT}`);
+  });
+}
+
+export { app };

@@ -43,6 +43,11 @@ export interface Project {
   open_crit: number;
   open_high: number;
   health_score: number;
+
+  // spec-live-map.md story 1 — live map read-model (see schema.ts for provenance).
+  has_flowmap: boolean;
+  map_crit: number;
+  map_warn: number;
 }
 
 /** A service used by a project, plus which account (e.g. supabase · "Supabase 2"). */
@@ -104,6 +109,10 @@ export function getDb(): Database.Database {
   addCol("open_crit", "INTEGER DEFAULT 0");
   addCol("open_high", "INTEGER DEFAULT 0");
   addCol("health_score", "INTEGER DEFAULT 0");
+  // spec-live-map.md story 1 — live map read-model fields on pre-existing DBs.
+  addCol("has_flowmap", "INTEGER DEFAULT 0");
+  addCol("map_crit", "INTEGER DEFAULT 0");
+  addCol("map_warn", "INTEGER DEFAULT 0");
   // `specs` table itself is created by the CREATE TABLE IF NOT EXISTS in SCHEMA above —
   // no ALTER TABLE needed for a wholly new table.
   return _db;
@@ -175,6 +184,10 @@ function rowToProject(r: any): Project {
     open_crit: r.open_crit ?? 0,
     open_high: r.open_high ?? 0,
     health_score: r.health_score ?? 0,
+
+    has_flowmap: !!r.has_flowmap,
+    map_crit: r.map_crit ?? 0,
+    map_warn: r.map_warn ?? 0,
   };
 }
 
@@ -198,13 +211,15 @@ export function createProject(input: Partial<Project> & { slug: string; name: st
        tests_status, tests_note, github_url, next_steps, keys_ref, local_path,
        last_touched, created_at,
        track, has_architecture, has_invariants, has_design_md, has_ci,
-       tests_count, tests_green, last_audit_date, open_crit, open_high, health_score)
+       tests_count, tests_green, last_audit_date, open_crit, open_high, health_score,
+       has_flowmap, map_crit, map_warn)
      VALUES
       (@slug, @name, @description, @type, @stage, @blockers, @language, @frameworks, @database, @services, @tasks,
        @tests_status, @tests_note, @github_url, @next_steps, @keys_ref, @local_path,
        @last_touched, @created_at,
        @track, @has_architecture, @has_invariants, @has_design_md, @has_ci,
-       @tests_count, @tests_green, @last_audit_date, @open_crit, @open_high, @health_score)`
+       @tests_count, @tests_green, @last_audit_date, @open_crit, @open_high, @health_score,
+       @has_flowmap, @map_crit, @map_warn)`
   ).run({
     slug: input.slug,
     name: input.name,
@@ -236,6 +251,9 @@ export function createProject(input: Partial<Project> & { slug: string; name: st
     open_crit: input.open_crit ?? 0,
     open_high: input.open_high ?? 0,
     health_score: input.health_score ?? 0,
+    has_flowmap: input.has_flowmap ? 1 : 0,
+    map_crit: input.map_crit ?? 0,
+    map_warn: input.map_warn ?? 0,
   });
   return getProject(input.slug)!;
 }
@@ -279,6 +297,9 @@ export function updateProject(slug: string, patch: Partial<Project>): Project | 
   if (patch.open_crit !== undefined) set("open_crit", patch.open_crit);
   if (patch.open_high !== undefined) set("open_high", patch.open_high);
   if (patch.health_score !== undefined) set("health_score", patch.health_score);
+  if (patch.has_flowmap !== undefined) set("has_flowmap", patch.has_flowmap ? 1 : 0);
+  if (patch.map_crit !== undefined) set("map_crit", patch.map_crit);
+  if (patch.map_warn !== undefined) set("map_warn", patch.map_warn);
   set("last_touched", now());
 
   getDb()

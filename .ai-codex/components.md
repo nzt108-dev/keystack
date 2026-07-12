@@ -6,6 +6,7 @@
 | src/db/index.ts | типизированные репозитории + поиск |
 | src/mcp/server.ts | MCP stdio сервер (McpServer + registerTool + zod) |
 | src/dashboard/server.ts | локальный дашборд (Fastify) |
+| src/dashboard/flowmap.ts | read-модель `.flowmap/` артефактов для `/map/:slug` (spec-live-map.md story 1) |
 | src/scan/ | (план) автозаполнение из репо |
 
 ## Dependencies
@@ -13,6 +14,10 @@
 - better-sqlite3 (БД, нативный, prebuild)
 - fastify (дашборд)
 - zod (схемы инструментов)
+- mermaid (dev) — источник vendored browser-бандла (`src/dashboard/vendor/mermaid.min.js`, версия
+  зафиксирована `^11.16.0` == та же, что уже используется в architect-portfolio); в рантайме из
+  Node-кода НЕ импортируется, нужен только чтобы `npm install` детерминированно давал тот же
+  `dist/mermaid.min.js`, который закоммичен в репо
 - tsx, typescript (dev)
 
 | src/scan/repo.ts | автозаполнение полей из репо (стек/сервисы/git/тесты) |

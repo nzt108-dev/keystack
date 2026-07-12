@@ -27,6 +27,16 @@ track ('A'|'B', default 'B'), has_architecture/has_invariants/has_design_md/has_
 tests_count (int, default 0), tests_green (0/1, default 0), last_audit_date (текст ISO дата, default ''),
 open_crit/open_high (int, default 0), health_score (int, default 0, формула §4.2 — считается ТОЛЬКО в scan-скрипте).
 
+**spec-live-map.md story 1 (Фаза A, 11.07)** — live-map read-model, заполняется `keystack-scan.sh`
+из `<local_path>/.flowmap/` артефактов (генератор — architect-portfolio/scripts/flowmap/*, keystack
+их только читает, никогда не генерит): has_flowmap (0/1 — есть ли директория `.flowmap/`),
+map_crit/map_warn (int, default 0 — счётчики для бейджа на карточке; сама страница `/map/:slug`
+читает артефакты живьём через `src/dashboard/flowmap.ts`, эти поля НЕ являются источником правды
+для страницы). Маппинг вердиктов (документирован в `lib.md`): map_crit = `ui-flow.json`
+`.verdict.crit` (0 если файла нет — нет данных, не «нуль проблем»); map_warn = `.verdict.warn` +
+`architecture.json` `.issues.length` (архитектурные issues — только `{message}`, без поля severity
+в контракте генератора, поэтому всегда считаются warn, никогда crit).
+
 ## specs (новое, FORGE wave1)
 Реестр `.ai-codex/specs/*.md` по проектам — read-model скана, источник правды остаётся файл спеки
 (keystack никогда не пишет статус стори обратно в .md).

@@ -144,6 +144,89 @@ describe("has_ci (.github/workflows/*.yml)", () => {
   });
 });
 
+describe("has_flowmap / map_crit / map_warn (spec-live-map.md story 1)", () => {
+  function writeFlowmap(dir: string, files: { mmd?: string; architecture?: unknown; uiFlow?: unknown }) {
+    const fm = join(dir, ".flowmap");
+    mkdirSync(fm, { recursive: true });
+    if (files.mmd !== undefined) writeFileSync(join(fm, "flowmap.mmd"), files.mmd);
+    if (files.architecture !== undefined) writeFileSync(join(fm, "architecture.json"), JSON.stringify(files.architecture));
+    if (files.uiFlow !== undefined) writeFileSync(join(fm, "ui-flow.json"), JSON.stringify(files.uiFlow));
+  }
+
+  it("no .flowmap/ at all -> zeros, not an error", () => {
+    const dir = projectDir();
+    createProject({ slug: "map-none", name: "MapNone", local_path: dir, track: "B" });
+
+    expect(() => runScan([dir, "--fast"])).not.toThrow();
+
+    const p = getProject("map-none")!;
+    expect(p.has_flowmap).toBe(false);
+    expect(p.map_crit).toBe(0);
+    expect(p.map_warn).toBe(0);
+  });
+
+  it("has_flowmap=1 with ui-flow.json verdict read as-is (crit/warn straight from the generator)", () => {
+    const dir = projectDir();
+    writeFlowmap(dir, {
+      mmd: "flowchart TD\n  a-->b\n",
+      uiFlow: { verdict: { crit: 1, warn: 2 }, issues: [] },
+    });
+    createProject({ slug: "map-uiflow", name: "MapUiFlow", local_path: dir, track: "A" });
+
+    runScan([dir, "--fast"]);
+
+    const p = getProject("map-uiflow")!;
+    expect(p.has_flowmap).toBe(true);
+    expect(p.map_crit).toBe(1);
+    expect(p.map_warn).toBe(2);
+  });
+
+  it("architecture.json issues (no severity field in that contract) fold into map_warn, never map_crit", () => {
+    const dir = projectDir();
+    writeFlowmap(dir, {
+      mmd: "flowchart TD\n  a-->b\n",
+      architecture: { issues: [{ message: "known deps not found" }, { message: "another note" }] },
+    });
+    createProject({ slug: "map-archissues", name: "MapArchIssues", local_path: dir, track: "B" });
+
+    runScan([dir, "--fast"]);
+
+    const p = getProject("map-archissues")!;
+    expect(p.has_flowmap).toBe(true);
+    expect(p.map_crit).toBe(0);
+    expect(p.map_warn).toBe(2); // 2 architecture issues, no ui-flow.json at all
+  });
+
+  it("both ui-flow.json warn and architecture.json issues combine into map_warn", () => {
+    const dir = projectDir();
+    writeFlowmap(dir, {
+      mmd: "flowchart TD\n  a-->b\n",
+      architecture: { issues: [{ message: "note" }] },
+      uiFlow: { verdict: { crit: 0, warn: 3 }, issues: [] },
+    });
+    createProject({ slug: "map-combined", name: "MapCombined", local_path: dir, track: "B" });
+
+    runScan([dir, "--fast"]);
+
+    const p = getProject("map-combined")!;
+    expect(p.map_crit).toBe(0);
+    expect(p.map_warn).toBe(4); // 3 (ui-flow) + 1 (architecture)
+  });
+
+  it(".flowmap/ present but empty (no artifacts yet) -> has_flowmap=1, crit/warn 0", () => {
+    const dir = projectDir();
+    mkdirSync(join(dir, ".flowmap"), { recursive: true });
+    createProject({ slug: "map-empty-dir", name: "MapEmptyDir", local_path: dir, track: "B" });
+
+    runScan([dir, "--fast"]);
+
+    const p = getProject("map-empty-dir")!;
+    expect(p.has_flowmap).toBe(true);
+    expect(p.map_crit).toBe(0);
+    expect(p.map_warn).toBe(0);
+  });
+});
+
 describe("tests_count (per-stack pattern, no double counting across test dirs)", () => {
   it("JS/TS stack: sums it()/test() across tests/ and src/__tests__/", () => {
     const dir = projectDir();

@@ -45,6 +45,72 @@ GET / (HTML витрина), /api/projects, /api/skills, /api/prompts. Порт 
 рядом с `tests`-индикатором в `.meta`). `withOpenSpecs()` — тот же `countOpenSpecsByProject()`
 GROUP BY, смёрженный в проекты перед рендером (и `/`, и `/api/projects`).
 
+`app` экспортируется именованным экспортом; `.listen()` вызывается только когда файл — точка входа
+(`isMain` — сравнение `import.meta.url` с `pathToFileURL(process.argv[1])`), НЕ при импорте тестами.
+Это единственная причина рефакторинга — тесты дёргают маршруты через `app.inject()` (Fastify),
+без реального порта.
+
+### spec-live-map.md story 1 (Фаза A, 11.07) — /map/:slug + vendored Mermaid
+`src/dashboard/flowmap.ts` — `readFlowmap(localPath)`: чистая read-функция над
+`<localPath>/.flowmap/` (architecture.json/ui-flow.json/flowmap.mmd — артефакты генератора
+architect-portfolio/scripts/flowmap/*, keystack их только читает). Никогда не бросает исключение —
+любая недостающая/битая часть деградирует в пустые поля (страница не должна падать на кривом
+flowmap). Возвращает `{ exists, mmd, mmdError?, crit, warn, issues[], archIssues[], archStats?,
+uiStats?, generatedAt, staleDays }`.
+
+Маппинг вердиктов (тот же, что в bash-сканере — см. ниже): `crit` = `ui-flow.json.verdict.crit`
+(0, если файла нет — «нет данных», не «нуль проблем», т.к. UI-слой генератора работает только для
+Next.js). `warn` = `ui-flow.json.verdict.warn` + `architecture.json.issues.length` — архитектурные
+issues (`ArchIssue = {message}`, БЕЗ поля severity в контракте генератора — проверено по
+`architect-portfolio/scripts/flowmap/types.ts`) всегда считаются warn, никогда crit (это
+структурные заметки вроде «известные зависимости не найдены в манифесте», не сломанный клик-путь).
+`flowmap.mmd` отсутствует/пуст/не читается → `mmd: null` + `mmdError` (тот же код-путь для «файла
+нет» и «файл битый» — обе ситуации рендерят одну и ту же плашку ошибки, различие видно только в
+тексте `mmdError`). `staleDays` — по mtime самого свежего из трёх артефактов; порог устаревания —
+константа `FLOWMAP_STALE_DAYS = 7`.
+
+### spec-live-map.md story 2 (Фаза B, 12.07) — architectureToMermaid fallback
+Находка стори 2: `architect-portfolio`'s `generate.ts` в архитектурном режиме больше не эмитит
+`flowmap.mmd` (mermaid.ts вырезан при пивоте на Excalidraw) — только `architecture.json`. У 5 из 8
+Track A (architect-portfolio/faithly/botseller/brieftube/astro-psiholog) нет `flowmap.mmd` вообще; у
+3 (spotbench/darshan/iwanttoeatair) сохранился legacy mmd с домермэйдж-пивота.
+
+`architectureToMermaid(arch)` в `flowmap.ts` — чистый конвертер `architecture.json` (parsed) →
+Mermaid `flowchart TD` текст. Классы по `node.kind` (реальные kind по всем 8 Track A на 12.07):
+`client`→`client`, `frontend`→`frontend`, `backend`→`backend`, `database`→`db`,
+`external-api`→`external`, `auth`→`auth`, `queue`→`queue`, `cache`→`cache`; неизвестный kind →
+нейтральный класс `node` (не падает на будущих kind генератора). `classDef`-строки эмитятся только
+для реально встреченных классов (не все 9 всегда). Экранирование в label: `"`→`#quot;`,
+`(`/`)`→`#40;`/`#41;`, `[`/`]`→`#91;`/`#93;` (кавычки ломают `["..."]`, скобки могут спутать парсер
+Mermaid). Детерминизм: узлы отсортированы по `id`, рёбра — по `(from, to, label)`; рёбра на
+несуществующий `id` отбрасываются (не рисуются висящими). Пустой/отсутствующий `nodes` → `""`
+(вызывающий код не должен подставлять пустую диаграмму).
+
+`readFlowmap` вызывает `architectureToMermaid` только когда `mmd === null` (нет/пуст/битый
+`flowmap.mmd`) И `architecture.json` распарсился: если конвертер вернул непустую строку — `mmd`
+заполняется ею, `mmdError` сбрасывается. Legacy `flowmap.mmd` (когда есть и непустой) всегда
+приоритетнее сгенерированного — он богаче (UI-флоу экранов, не только инфраструктурный граф).
+`server.ts`/`mapPage()` не менялись — они уже рендерят что угодно непустое в `fm.mmd` через тот же
+`#mermaid-render` путь.
+
+`GET /map/:slug` (в server.ts): `getProject(slug)` → нет проекта → 404 с плашкой «не найден».
+Есть проект → `readFlowmap(project.local_path)` → `mapPage()` рендерит: нет `.flowmap/` вообще
+(`!exists`) → плашка «прогони /sync»; иначе — бейджи CRIT/WARN (+ «устарела», если применимо) +
+список issues (ui-flow issues как есть + archIssues как WARN) + либо `<div id="mermaid-render">`
+(рендер на клиенте через `window.mermaid.render()`, сырой mmd передан в `<script
+type="application/json">`, экранирован тем же паттерном `.replace(/</g,"\\u003c")`, что и `DATA` на
+главной странице) либо плашку `.map-error`, если `mmd` пуст.
+
+`GET /vendor/mermaid.min.js` — раздаёт `src/dashboard/vendor/mermaid.min.js` (закоммичен в репо,
+скопирован из npm-пакета `mermaid@11.16.0`'s `dist/mermaid.min.js` — официальный browser-bundle
+пакета, не самодельная сборка). НЕ CDN — дашборд обязан работать офлайн. `npm run build` копирует
+его в `dist/dashboard/vendor/` (см. package.json `build` script) — `tsc` копирует только `.ts`,
+статический ассет копируется отдельной командой. Кэшируется в памяти (`Buffer`) после первого
+запроса.
+
+Карточка проекта (`projectCard`): `p.has_flowmap` → ссылка `<a href="/map/{slug}">🗺 карта</a>` +
+бейдж `N CRIT`, если `p.map_crit > 0`. Нет `has_flowmap` → ссылки нет вовсе.
+
 ## src/scan/repo.ts — автозаполнение
 scanRepo(dir) → { language, frameworks, database, services, github_url, tests_status, detected_from }.
 Читает package.json/pubspec/requirements/pyproject/Cargo/go.mod, .env.example (сервисы по префиксам), git remote. Pure read.
@@ -84,6 +150,16 @@ pyproject.toml, не по колонке `language`), `tests_green` (прого�
 стек — `.venv/bin/pytest -q` → `uv run pytest -q` → `npm test` → `flutter test`), `health_score`
 (§4.2: Track A — `20·arch+15·inv+15·ci+min(20,tests_count)·tgreen+15·audit_fresh+15·clean`; Track B —
 `50·inv+min(50,5·tests_count)·tgreen`, обе части формулы целочисленные, без округления).
+
+**Живая карта** (`has_flowmap`/`map_crit`/`map_warn`, spec-live-map.md story 1, 11.07):
+`check_flowmap()` — `<proj_dir>/.flowmap/` не существует → `0|0|0`. Существует → `has_flowmap=1`,
+`map_crit` = `jq '.verdict.crit // 0' ui-flow.json` (0, если файла нет — не «нуль проблем», данных
+просто нет; UI-слой генератора работает только для Next.js), `map_warn` = `.verdict.warn` того же
+файла + `jq '.issues|length' architecture.json` (architecture-issues без поля severity в контракте
+генератора — только структурные заметки, никогда crit). Нет `jq` в PATH → лог-предупреждение,
+`has_flowmap=1`, но `map_crit`/`map_warn` принудительно 0 (не роняет скан). Та же логика продублирована
+в TS для живой страницы — см. `src/dashboard/flowmap.ts` ниже (bash не может импортировать TS-модуль
+и наоборот, поэтому маппинг документирован в обоих местах, а не в одном общем файле).
 
 **Парсер спек** (`.ai-codex/specs/*.md`, не `specs/done/`): title = первая строка `# Spec: …`;
 `stories_total`/`stories_done` — ⬜/✅ ТОЛЬКО внутри строк-таблицы блока `## Стори…` до следующего

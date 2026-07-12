@@ -84,6 +84,11 @@ describe("schema migration (old DB -> FORGE wave1 contract)", () => {
     expect(p.open_high).toBe(0);
     expect(p.health_score).toBe(0);
 
+    // spec-live-map.md story 1 columns on pre-existing DBs.
+    expect(p.has_flowmap).toBe(false);
+    expect(p.map_crit).toBe(0);
+    expect(p.map_warn).toBe(0);
+
     // `specs` table created by the migration.
     const specsCols = (db.prepare("PRAGMA table_info(specs)").all() as { name: string }[]).map((c) => c.name);
     expect(specsCols).toEqual(

@@ -11,7 +11,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/dashboard/vendor && cp src/dashboard/vendor/mermaid.min.js dist/dashboard/vendor/mermaid.min.js",
     "mcp": "tsx src/mcp/server.ts",
     "dashboard": "tsx src/dashboard/server.ts",
     "dev": "tsx watch src/dashboard/server.ts",
@@ -37,6 +37,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
+    "mermaid": "^11.16.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^4.1.8"
