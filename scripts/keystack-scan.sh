@@ -509,6 +509,9 @@ run_all() {
   echo "keystack-scan: scanning all projects (fast=$FAST)"
   while IFS='|' read -r slug local_path frameworks track; do
     [ -z "$slug" ] && continue
+    # Путь мог быть записан с тильдой (~/Projects/plumbline): bash её в
+    # переменной не раскрывает, и проект молча считался пропавшим (02.10.2026).
+    local_path="${local_path/#\~/$HOME}"
     if scan_one_project "$slug" "$local_path" "$frameworks" "$track"; then
       ok_count=$((ok_count + 1))
     else
